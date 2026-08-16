@@ -1,0 +1,15 @@
+[project]
+name = "olist-ecommerce"
+version = "0.1.0"
+description = "Data engineering portfolio project"
+readme = "README.md"
+authors = [
+    { name = "Felix Manuel Aguila Alonso", email = "feloaguila@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.3.4",
+    "python-dotenv>=1.2.2",
+]
+
+

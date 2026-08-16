@@ -1,0 +1,16 @@
+services:
+  oltp:
+    image: postgres:16-alpine
+    container_name: ecommerce_oltp
+    env_file: .env            # credentials from env
+    ports:
+      - "${OLTP_PORT:-5433}:5432"   # 5433 on host avoids conflicts
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  pgdata:
