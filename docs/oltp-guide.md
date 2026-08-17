@@ -144,9 +144,16 @@ The simulator also advances 5 existing orders from `shipped` to `delivered` per 
 ### Usage
 
 ```bash
-make simulator              # 50 orders (default)
-uv run python src/oltp/simulator.py --orders 100
+docker compose up -d       # starts Postgres + seed + simulator (continuous)
+make db-shell              # open psql to explore
+make simulator             # run simulator once manually (Docker)
+uv run python src/oltp/simulator.py --orders 100   # run locally with uv
+uv run python src/oltp/simulator.py --continuous --interval 15   # continuous locally
 ```
+
+### Continuous mode
+
+`--continuous` loops forever, generating batches at `--interval` seconds (default 30). This is how the Docker service runs — the OLTP is always live, just like a real production backend.
 
 ### Summary output
 

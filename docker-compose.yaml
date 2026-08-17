@@ -2,9 +2,9 @@ services:
   oltp:
     image: postgres:16-alpine
     container_name: ecommerce_oltp
-    env_file: .env            # credentials from env
+    env_file: .env
     ports:
-      - "${OLTP_PORT:-5433}:5432"   # 5433 on host avoids conflicts
+      - "${OLTP_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -12,5 +12,41 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  seed:
+    build: .
+    container_name: ecommerce_seed
+    command: uv run python src/oltp/seed.py
+    environment:
+      OLTP_HOST: oltp
+      OLTP_PORT: "5432"
+      PYTHONUNBUFFERED: "1"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+    depends_on:
+      oltp:
+        condition: service_healthy
+
+  simulator:
+    build: .
+    container_name: ecommerce_simulator
+    command: uv run python src/oltp/simulator.py --continuous --orders 50 --interval 30
+    environment:
+      OLTP_HOST: oltp
+      OLTP_PORT: "5432"
+      PYTHONUNBUFFERED: "1"
+    env_file: .env
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      oltp:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   pgdata:

@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+data/olist-dataset
+images
+docs
+*.md
+.dockerignore
+.gitignore
+.python-version

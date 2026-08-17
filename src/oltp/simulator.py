@@ -6,11 +6,13 @@ transitions, items, payments, reviews — plus backdated rows and
 anomalies that test data quality checks in later phases.
 
 Usage:
-    python src/oltp/simulator.py            # 50 orders (default)
+    python src/oltp/simulator.py              # 50 orders (default)
     python src/oltp/simulator.py --orders 100
+    python src/oltp/simulator.py --continuous --interval 30
 """
 import argparse
 import random
+import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -46,11 +48,8 @@ REVIEW_RATE = 0.993
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
-dsn = (
-    f"postgresql://{Path(__file__).resolve().parent.parent.parent / '.env'}"
-)
+# ── 2. ENV ─────────────────────────────────────────────────────────────────────
 
-# Actually build from env vars
 import os
 dsn = (
     f"postgresql://{os.environ['POSTGRES_USER']}"
@@ -85,8 +84,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simulate new e-commerce data")
     parser.add_argument("--orders", type=int, default=50,
                         help="Number of new orders to generate (default: 50)")
+    parser.add_argument("--continuous", action="store_true",
+                        help="Run forever, generating batches at each interval")
+    parser.add_argument("--interval", type=int, default=30,
+                        help="Seconds between batches in continuous mode (default: 30)")
     args = parser.parse_args()
 
+    while True:
+        _run_batch(args)
+
+        if not args.continuous:
+            break
+
+        print(f"\n  Next batch in {args.interval}s...")
+        time.sleep(args.interval)
+
+
+def _run_batch(args: argparse.Namespace) -> None:
     stats = {
         "new_orders": 0, "new_items": 0, "new_payments": 0,
         "new_reviews": 0, "status_updates": 0, "backdated": 0,

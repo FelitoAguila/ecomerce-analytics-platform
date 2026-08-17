@@ -7,7 +7,7 @@ down:
 	docker compose down
 
 db-init:
-	uv run python src/oltp/seed.py
+	docker compose run --rm seed
 
 db-shell:
 	docker exec -it ecommerce_oltp psql \
@@ -15,4 +15,4 @@ db-shell:
 		-d $$(sed -n 's/^POSTGRES_DB=//p' .env | tr -d '\r' | xargs)
 
 simulator:
-	uv run python src/oltp/simulator.py
+	docker compose run --rm simulator

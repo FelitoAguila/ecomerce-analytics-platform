@@ -22,28 +22,32 @@ The 9 CSVs (~121MB total) are gitignored and not shipped with the repo.
 ## Quickstart
 
 ```bash
-cp .env.example .env    # edit with your Postgres credentials
-make up                 # start Postgres in Docker
-make db-init            # load the schema + all 9 CSVs
-make db-shell           # open psql, explore the data, \q to exit
-make down               # stop Postgres
+cp .env.example .env
+docker compose up -d
+
+# Seed loads historical data once → simulator starts generating live data
+# Open a SQL shell to explore:
+make db-shell
+
+# Stop everything:
+docker compose down
 ```
 
-One-liner to start fresh:
+One-liner to reset from scratch:
 
 ```bash
-make up && make db-init
+docker compose down -v && docker compose up -d
 ```
 
 ## Makefile targets
 
 | Target | Command | Description |
 |---|---|---|
-| `make up` | `docker compose up -d` | Start Postgres in Docker |
-| `make down` | `docker compose down` | Stop Postgres |
-| `make db-init` | `uv run python src/oltp/seed.py` | Drop + recreate tables, load all 9 CSVs |
+| `make up` | `docker compose up -d` | Start the full OLTP stack |
+| `make down` | `docker compose down` | Stop everything |
+| `make db-init` | `docker compose run --rm seed` | Re-seed the database |
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
-| `make simulator` | `uv run python src/oltp/simulator.py` | Generate 50 new orders + anomalies |
+| `make simulator` | `docker compose run --rm simulator` | Run simulator once (manual) |
 
 ## Project structure
 
@@ -51,7 +55,8 @@ make up && make db-init
 olist-ecommerce/
 ├── README.md
 ├── Makefile               # short targets for common commands
-├── docker-compose.yaml    # Postgres 16 service
+├── Dockerfile             # Python 3.12 + uv + deps (shared by seed + simulator)
+├── docker-compose.yaml    # Postgres + seed + simulator services
 ├── pyproject.toml         # uv project + deps
 ├── .env / .env.example    # DB credentials (gitignored)
 ├── data/olist-dataset/    # 9 Olist CSVs (~121MB, gitignored)
