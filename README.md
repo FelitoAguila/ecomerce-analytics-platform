@@ -43,6 +43,7 @@ make up && make db-init
 | `make down` | `docker compose down` | Stop Postgres |
 | `make db-init` | `uv run python src/oltp/seed.py` | Drop + recreate tables, load all 9 CSVs |
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
+| `make simulator` | `uv run python src/oltp/simulator.py` | Generate 50 new orders + anomalies |
 
 ## Project structure
 
@@ -56,9 +57,10 @@ olist-ecommerce/
 ├── data/olist-dataset/    # 9 Olist CSVs (~121MB, gitignored)
 ├── src/oltp/
 │   ├── schema.sql         # 9 tables, PKs, FKs, updated_at triggers
-│   └── seed.py            # drop + create + COPY CSVs → Postgres
+│   ├── seed.py            # drop + create + COPY CSVs → Postgres
+│   └── simulator.py       # fake backend: new orders + anomalies
 └── docs/
-    └── oltp-schema-decisions.md
+    └── oltp-guide.md      # schema, seed, and simulator decisions
 ```
 
 ## Design decisions
