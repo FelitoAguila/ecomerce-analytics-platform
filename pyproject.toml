@@ -8,6 +8,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "dlt[duckdb,sql-database]>=1.30.0",
+    "pg8000>=1.31.5",
     "psycopg[binary]>=3.3.4",
     "python-dotenv>=1.2.2",
 ]

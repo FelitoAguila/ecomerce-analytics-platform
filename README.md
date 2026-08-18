@@ -48,6 +48,7 @@ docker compose down -v && docker compose up -d
 | `make db-init` | `docker compose run --rm seed` | Re-seed the database |
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
 | `make simulator` | `docker compose run --rm simulator` | Run simulator once (manual) |
+| `make dlt-pipeline` | `cd src/dlt_pipeline && uv run python dlt_pipeline.py` | Run dlt ELT pipeline |
 
 ## Project structure
 
@@ -64,8 +65,12 @@ olist-ecommerce/
 │   ├── schema.sql         # 9 tables, PKs, FKs, updated_at triggers
 │   ├── seed.py            # drop + create + COPY CSVs → Postgres
 │   └── simulator.py       # fake backend: new orders + anomalies
+├── src/dlt_pipeline/
+│   ├── dlt_pipeline.py    # dlt ELT: Postgres → DuckDB (incremental)
+│   └── .dlt/              # dlt config (empty secrets.toml, config.toml)
 └── docs/
-    └── oltp-guide.md      # schema, seed, and simulator decisions
+    ├── oltp-guide.md      # schema, seed, and simulator decisions
+    └── dlt-pipeline.md    # dlt pipeline architecture and decisions
 ```
 
 ## Design decisions

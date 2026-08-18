@@ -1,4 +1,4 @@
-.PHONY: up down db-init db-shell simulator
+.PHONY: up down db-init db-shell simulator dlt-pipeline
 
 up:
 	docker compose up -d
@@ -16,3 +16,6 @@ db-shell:
 
 simulator:
 	docker compose run --rm simulator
+
+dlt-pipeline:
+	cd src/dlt_pipeline && uv run python dlt_pipeline.py
