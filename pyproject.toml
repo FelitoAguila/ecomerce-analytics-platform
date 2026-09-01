@@ -14,4 +14,12 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[dependency-groups]
+dbt-duckdb = [
+    "dbt-duckdb>=1.11.0",
+]
+dev = [
+    "ipykernel>=7.3.0",
+]
+
 

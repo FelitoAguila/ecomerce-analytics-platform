@@ -1,0 +1,140 @@
+version: 2
+
+models:
+  - name: stg_olist__customers
+    description: "Cleaned customers, one row per order-derived customer record."
+    columns:
+      - name: customer_id
+        description: "Primary key. Unique identifier for a customer record."
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_unique_id
+        description: "Stable identifier for the real customer (may repeat across orders)."
+        data_tests:
+          - not_null
+  
+  - name: stg_olist__sellers
+    description: "Cleaned sellers, one row per seller record."
+    columns:
+      - name: seller_id
+        description: "Primary key. Unique identifier for a seller record."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_olist__products
+    description: "Cleaned products, one row per product record."
+    columns:
+      - name: product_id
+        description: "Primary key. Unique identifier for a product record."
+        data_tests:
+          - unique
+          - not_null
+  
+  - name: stg_olist__orders
+    description: "Cleaned orders, one row per order record."
+    columns:
+      - name: order_id
+        description: "Primary key. Unique identifier for an order record."
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Foreign key. Unique identifier for the customer that placed the order."
+        data_tests:
+          - not_null
+          - relationships:
+              to: source('ecommerce_data', 'customers')
+              field: customer_id
+      - name: order_status
+        description: "Status of the order. Only a set of values is allowed."
+        data_tests:
+          - accepted_values:
+              values: ['created', 'approved', 'invoiced', 'processing', 'shipped', 'delivered', 'canceled', 'unavailable']
+      - name: order_purchase_timestamp
+        description: "Timestamp when the order was purchased."
+        data_tests:
+          - not_null
+  
+  - name: stg_olist__order_items
+    description: "Cleaned order items, one row per order item from an order."
+    columns:
+      - name: order_id
+        description: "Foreign key. Unique identifier for the order that contains the item."
+        data_tests:
+          - not_null
+          - relationships:
+              to: source('ecommerce_data', 'orders')
+              field: order_id
+      - name: product_id
+        description: "Foreign key. Unique identifier for the product that is being ordered."
+        data_tests:
+          - relationships:
+              to: source('ecommerce_data', 'products')
+              field: product_id
+      - name: seller_id
+        description: "Foreign key. Unique identifier for the seller that is selling the product."
+        data_tests:
+          - relationships:
+              to: source('ecommerce_data', 'sellers')
+              field: seller_id
+      - name: price
+        description: "Price of the product in the order item."
+        data_tests:
+          - not_null
+
+  - name: stg_olist__order_payments
+    description: "Cleaned order payments, one row per order paid."
+    columns:
+      - name: order_id
+        description: "Foreign key. Unique identifier for the order that is being paid."
+        data_tests:
+          - not_null
+          - relationships:
+              to: source('ecommerce_data', 'orders')
+              field: order_id
+      - name: payment_type
+        description: "Type of payment used for the order. Only a set of values is allowed."
+        data_tests:
+          - accepted_values:
+              values: ['credit_card', 'boleto', 'voucher', 'debit_card', 'not_defined']
+      - name: payment_value
+        description: "Value of the payment made for the order."
+        data_tests:
+          - not_null
+
+  - name: stg_olist__reviews
+    description: "Cleaned reviews, one row per order reviewed."
+    columns:
+      - name: order_id
+        description: "Foreign key. Unique identifier for the order that was reviewed."
+        data_tests:
+          - not_null
+          - relationships:
+              to: source('ecommerce_data', 'orders')
+              field: order_id
+      - name: review_score
+        description: "Score given by the customer to the order, from 1 to 5. Nulls are allowed."
+        data_tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+              where: "review_score is not null"
+  
+  - name: stg_olist__geolocation
+    description: "Cleaned geolocation, one row per geolocation record."
+    columns:
+      - name: geolocation_id
+        description: "Surrogate primary key. Unique identifier for a geolocation record."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_olist__product_category_name_translation
+    description: "Cleaned product category name translations, one row per product category name record."
+    columns:
+      - name: product_category_name
+        description: "Primary key. Unique identifier for a product category name record."
+        data_tests:
+          - unique
+          - not_null

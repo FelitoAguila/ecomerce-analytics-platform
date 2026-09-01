@@ -29,6 +29,12 @@ docker compose up -d
 # Open a SQL shell to explore:
 make db-shell
 
+# Run the ELT pipeline: extract from Postgres → load into DuckDB (bronze)
+make dlt-pipeline
+
+# Run dbt: build models + snapshot + tests (silver/gold layers)
+make dbt-build
+
 # Stop everything:
 docker compose down
 ```
@@ -49,6 +55,13 @@ docker compose down -v && docker compose up -d
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
 | `make simulator` | `docker compose run --rm simulator` | Run simulator once (manual) |
 | `make dlt-pipeline` | `cd src/dlt_pipeline && uv run python dlt_pipeline.py` | Run dlt ELT pipeline |
+| `make dbt-debug` | `cd dbt && uv run dbt debug` | Verify DuckDB connection + config |
+| `make dbt-parse` | `cd dbt && uv run dbt parse` | Re-render project; catch YAML/syntax errors |
+| `make dbt-run` | `cd dbt && uv run dbt run` | Build all models (staging → intermediate → marts) |
+| `make dbt-test` | `cd dbt && uv run dbt test` | Run all data tests |
+| `make dbt-build` | `cd dbt && uv run dbt build` | Full gate: models + snapshot + tests in order |
+| `make dbt-snapshot` | `cd dbt && uv run dbt snapshot` | Run SCD Type 2 snapshots only |
+| `make dbt-docs` | `cd dbt && uv run dbt docs ...` | Generate + serve lineage docs (localhost:8080) |
 
 ## Project structure
 
@@ -58,7 +71,7 @@ olist-ecommerce/
 ├── Makefile               # short targets for common commands
 ├── Dockerfile             # Python 3.12 + uv + deps (shared by seed + simulator)
 ├── docker-compose.yaml    # Postgres + seed + simulator services
-├── pyproject.toml         # uv project + deps
+├── pyproject.toml         # uv project + deps (incl. dbt-duckdb group)
 ├── .env / .env.example    # DB credentials (gitignored)
 ├── data/olist-dataset/    # 9 Olist CSVs (~121MB, gitignored)
 ├── src/oltp/
@@ -68,10 +81,28 @@ olist-ecommerce/
 ├── src/dlt_pipeline/
 │   ├── dlt_pipeline.py    # dlt ELT: Postgres → DuckDB (incremental)
 │   └── .dlt/              # dlt config (empty secrets.toml, config.toml)
+├── dbt/                   # transformations: silver + gold + tests
+│   ├── dbt_project.yml    # per-layer materialization + schema config
+│   ├── profiles.yml       # DuckDB connection (points at warehouse file)
+│   ├── models/            # staging/ → intermediate/ → marts/
+│   ├── snapshots/         # orders snapshots (SCD Type 2)
+│   └── tests/generic/     # custom generic tests
 └── docs/
     ├── oltp-guide.md      # schema, seed, and simulator decisions
-    └── dlt-pipeline.md    # dlt pipeline architecture and decisions
+    ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
+    └── dbt-guide.md       # dbt layers, schema strategy, tests, snapshots
 ```
+
+## Phase status
+
+- [x] **0. Foundations** — repo layout, deps (uv), Makefile
+- [x] **1. OLTP + seed** — Postgres schema, triggers, COPY loader
+- [x] **2. Simulator** — fake backend generating live data + anomalies
+- [x] **3. ELT (dlt)** — incremental Postgres → DuckDB bronze
+- [x] **4. dbt** — silver/gold star schema, SCD2 snapshots, 73 tests
+- [ ] **5. Orchestration** — Prefect flows (Airflow port later)
+- [ ] **6. Serving** — dashboard + daily digest (decision gates)
+- [ ] **7. Cloud (GCP)** — BigQuery, managed Postgres, IaC
 
 ## Design decisions
 
