@@ -62,6 +62,12 @@ docker compose down -v && docker compose up -d
 | `make dbt-build` | `cd dbt && uv run dbt build` | Full gate: models + snapshot + tests in order |
 | `make dbt-snapshot` | `cd dbt && uv run dbt snapshot` | Run SCD Type 2 snapshots only |
 | `make dbt-docs` | `cd dbt && uv run dbt docs ...` | Generate + serve lineage docs (localhost:8080) |
+| `make prefect-server` | `prefect server start --host 0.0.0.0` | Start local Prefect server (localhost:4200) |
+| `make prefect-flow` | `python orchestration/prefect/flows.py` | Run ELT flow once (manual trigger) |
+| `make prefect-serve` | `python orchestration/prefect/flows.py --serve` | Serve as daily 07:00 deployment |
+| `make prefect-pool` | `prefect work-pool create --type process elt-pool` | Create process work pool (one-time) |
+| `make prefect-deploy` | `prefect deploy ... --name elt-daily --pool elt-pool` | Deploy flow to work pool |
+| `make prefect-worker` | `prefect worker start --pool elt-pool` | Start worker that pulls from pool |
 
 ## Project structure
 
@@ -71,7 +77,7 @@ olist-ecommerce/
 ├── Makefile               # short targets for common commands
 ├── Dockerfile             # Python 3.12 + uv + deps (shared by seed + simulator)
 ├── docker-compose.yaml    # Postgres + seed + simulator services
-├── pyproject.toml         # uv project + deps (incl. dbt-duckdb group)
+├── pyproject.toml         # uv project + deps (incl. dbt-duckdb, orchestration groups)
 ├── .env / .env.example    # DB credentials (gitignored)
 ├── data/olist-dataset/    # 9 Olist CSVs (~121MB, gitignored)
 ├── src/oltp/
@@ -87,10 +93,14 @@ olist-ecommerce/
 │   ├── models/            # staging/ → intermediate/ → marts/
 │   ├── snapshots/         # orders snapshots (SCD Type 2)
 │   └── tests/generic/     # custom generic tests
+├── orchestration/         # Prefect: server + work pool + worker
+│   └── prefect/
+│       └── flows.py       # elt_flow: dlt → dbt build (tasks, --serve)
 └── docs/
     ├── oltp-guide.md      # schema, seed, and simulator decisions
     ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
-    └── dbt-guide.md       # dbt layers, schema strategy, tests, snapshots
+    ├── dbt-guide.md       # dbt layers, schema strategy, tests, snapshots
+    └── orchestration.md   # Prefect setup, Airflow mapping, WSL2 notes
 ```
 
 ## Phase status
@@ -100,7 +110,7 @@ olist-ecommerce/
 - [x] **2. Simulator** — fake backend generating live data + anomalies
 - [x] **3. ELT (dlt)** — incremental Postgres → DuckDB bronze
 - [x] **4. dbt** — silver/gold star schema, SCD2 snapshots, 73 tests
-- [ ] **5. Orchestration** — Prefect flows (Airflow port later)
+- [x] **5. Orchestration** — Prefect flows (Airflow port later)
 - [ ] **6. Serving** — dashboard + daily digest (decision gates)
 - [ ] **7. Cloud (GCP)** — BigQuery, managed Postgres, IaC
 

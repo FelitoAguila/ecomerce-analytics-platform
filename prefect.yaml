@@ -1,0 +1,12 @@
+# Prefect deployment configuration.
+# Used by: make prefect-deploy
+# Docs: https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml
+
+deployments:
+  - name: elt-daily
+    entrypoint: orchestration/prefect/flows.py:elt_flow
+    work_pool:
+      name: elt-pool
+    concurrency_limit: 1
+    schedules:
+      - cron: "0 7 * * *"
