@@ -2,7 +2,7 @@ services:
   oltp:
     image: postgres:16-alpine
     container_name: ecommerce_oltp
-    env_file: .env
+    env_file:  ../.env
     ports:
       - "${OLTP_PORT:-5433}:5432"
     volumes:
@@ -15,7 +15,9 @@ services:
     restart: unless-stopped
 
   seed:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: ecommerce_seed
     command: uv run python src/oltp/seed.py
     environment:
@@ -31,7 +33,9 @@ services:
         condition: service_healthy
 
   simulator:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: ecommerce_simulator
     command: uv run python src/oltp/simulator.py --continuous --orders 50 --interval 30
     environment:

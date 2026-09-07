@@ -2,4 +2,4 @@
 
 The olist dataset goes in this directory.
 
-[Guide](../../README.md#dataset)
+[Guide](../README.md#dataset)
