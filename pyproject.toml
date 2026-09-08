@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 seed = "olist.oltp.seed:main"
 simulate = "olist.oltp.simulator:main"
+ingest = "olist.pipeline.ingestion.dlt_ingestion:main"
 
 [dependency-groups]
 dbt-duckdb = [

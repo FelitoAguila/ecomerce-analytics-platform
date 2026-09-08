@@ -14,7 +14,8 @@ wheels/
 
 # Data
 data/olist-dataset/*.csv
-data/local-warehouse/*.duckdb
+data/warehouse/*.duckdb
+data/warehouse/*.wal
 
 # Notebooks
 notebooks

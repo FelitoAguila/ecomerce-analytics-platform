@@ -3,5 +3,5 @@ olist_ecommerce:
   outputs:
     dev:
       type: duckdb
-      path: ../src/dlt_pipeline/load_ecommerce_data.duckdb
+      path: ../../../../data/warehouse/ecommerce.duckdb
       threads: 4
