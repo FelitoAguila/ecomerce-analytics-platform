@@ -2,7 +2,6 @@ version: 2
 
 sources:
   - name: ecommerce_data
-    database: load_ecommerce_data
     schema: ecommerce_data
     loader: dlt
 

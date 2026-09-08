@@ -3,5 +3,5 @@ olist_ecommerce:
   outputs:
     dev:
       type: duckdb
-      path: ../../../../data/warehouse/ecommerce.duckdb
+      path: "{{ env_var('WAREHOUSE_LOCAL__PATH', '../../../../data/warehouse/ecommerce.duckdb') }}"
       threads: 4

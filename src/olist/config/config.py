@@ -1,7 +1,10 @@
+import os
+import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, PostgresDsn
+from pydantic import BaseModel, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +19,19 @@ class WarehouseLocal(BaseModel):
     """DuckDB Data Warehouse"""
 
     path: str = "data/warehouse/ecommerce.duckdb"
+
+    @field_validator("path")
+    @classmethod
+    def _validate_warehouse_path(cls, v: str) -> str:
+        if re.match(r"^[A-Za-z]:[\\/]", v) and os.name != "nt":
+            raise ValueError(
+                f"Windows-style path {v!r} is not valid on this platform; "
+                "use an absolute path for the current OS"
+            )
+        path = Path(v).expanduser().resolve()
+        if path.suffix != ".duckdb":
+            raise ValueError(f"Warehouse path must end in .duckdb, got {v!r}")
+        return str(path)
 
 
 class PipelineSettings(BaseModel):
