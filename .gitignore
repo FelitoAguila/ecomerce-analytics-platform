@@ -10,10 +10,11 @@ wheels/
 .venv
 
 # Env vars
-.env
+*.env
+*.env.local
 
 # Data
-data/olist-dataset/*.csv
+ecommerce_db/olist-dataset/*.csv
 data/warehouse/*.duckdb
 data/warehouse/*.wal
 
