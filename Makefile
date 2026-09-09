@@ -1,7 +1,7 @@
 # Targets for dockerized OLTP + local ELT/transforms.
 # Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
 
-.PHONY: up down db-init db-shell simulator dlt-pipeline dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker
+.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker
 
 up:
 	cd ecommerce_db && docker compose up -d
@@ -19,11 +19,12 @@ simulator:
 	cd ecommerce_db && docker compose run --rm simulator
 
 # Run the dlt ELT pipeline: extract from Postgres -> load into DuckDB (bronze).
-dlt-pipeline:
-	cd src/dlt_pipeline && uv run python dlt_pipeline.py
+# Runs from the repo root so pipeline.config reads the root .env.
+ingest:
+	uv run ingest
 
-# --- dbt (must run from the dbt/ project dir; dbt 1.9+ no longer accepts --project-dir) ---
-DBT := cd dbt && uv run dbt
+# --- dbt (must run from the dbt project dir; dbt 1.9+ no longer accepts --project-dir) ---
+DBT := cd pipeline/dbt && uv run --group dbt-duckdb --env-file ../../.env dbt
 
 # Verify the DuckDB connection and project config.
 dbt-debug:

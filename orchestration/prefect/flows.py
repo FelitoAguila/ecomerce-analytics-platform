@@ -9,8 +9,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 @task(retries=1, retry_delay_seconds=10)
 def run_dlt() -> None:
     result = subprocess.run(
-        ["uv", "run", "python", "dlt_pipeline.py"],
-        cwd=REPO_ROOT / "src" / "dlt_pipeline",
+        ["uv", "run", "ingest"],
+        cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,
@@ -22,8 +22,12 @@ def run_dlt() -> None:
 @task(retries=1, retry_delay_seconds=10)
 def run_dbt() -> None:
     result = subprocess.run(
-        ["uv", "run", "--group", "dbt-duckdb", "dbt", "build"],
-        cwd=REPO_ROOT / "dbt",
+        [
+            "uv", "run", "--group", "dbt-duckdb",
+            "--env-file", str(REPO_ROOT / ".env"),
+            "dbt", "build",
+        ],
+        cwd=REPO_ROOT / "pipeline" / "dbt",
         check=True,
         capture_output=True,
         text=True,

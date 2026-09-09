@@ -15,7 +15,7 @@ orchestration.
 Download the Olist public dataset:
 
 1. Download the zip from [Google Drive](https://drive.google.com/file/d/1HIy4LNNQESuXUj-u_mNJTCGCRrCeSbo-/view?usp=share_link)
-2. Extract the `olist-dataset` folder into `data/` so you get `data/olist-dataset/*.csv`
+2. Extract the `olist-dataset` folder into `ecommerce_db/` so you get `ecommerce_db/olist-dataset/*.csv`
 
 The 9 CSVs (~121MB total) are gitignored and not shipped with the repo.
 
@@ -30,7 +30,7 @@ docker compose up -d
 make db-shell
 
 # Run the ELT pipeline: extract from Postgres → load into DuckDB (bronze)
-make dlt-pipeline
+make ingest
 
 # Run dbt: build models + snapshot + tests (silver/gold layers)
 make dbt-build
@@ -54,14 +54,14 @@ docker compose down -v && docker compose up -d
 | `make db-init` | `docker compose run --rm seed` | Re-seed the database |
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
 | `make simulator` | `docker compose run --rm simulator` | Run simulator once (manual) |
-| `make dlt-pipeline` | `cd src/dlt_pipeline && uv run python dlt_pipeline.py` | Run dlt ELT pipeline |
-| `make dbt-debug` | `cd dbt && uv run dbt debug` | Verify DuckDB connection + config |
-| `make dbt-parse` | `cd dbt && uv run dbt parse` | Re-render project; catch YAML/syntax errors |
-| `make dbt-run` | `cd dbt && uv run dbt run` | Build all models (staging → intermediate → marts) |
-| `make dbt-test` | `cd dbt && uv run dbt test` | Run all data tests |
-| `make dbt-build` | `cd dbt && uv run dbt build` | Full gate: models + snapshot + tests in order |
-| `make dbt-snapshot` | `cd dbt && uv run dbt snapshot` | Run SCD Type 2 snapshots only |
-| `make dbt-docs` | `cd dbt && uv run dbt docs ...` | Generate + serve lineage docs (localhost:8080) |
+| `make ingest` | `uv run ingest` | Run dlt ELT pipeline (Postgres → DuckDB bronze) |
+| `make dbt-debug` | `cd pipeline/dbt && uv run dbt debug` | Verify DuckDB connection + config |
+| `make dbt-parse` | `cd pipeline/dbt && uv run dbt parse` | Re-render project; catch YAML/syntax errors |
+| `make dbt-run` | `cd pipeline/dbt && uv run dbt run` | Build all models (staging → intermediate → marts) |
+| `make dbt-test` | `cd pipeline/dbt && uv run dbt test` | Run all data tests |
+| `make dbt-build` | `cd pipeline/dbt && uv run dbt build` | Full gate: models + snapshot + tests in order |
+| `make dbt-snapshot` | `cd pipeline/dbt && uv run dbt snapshot` | Run SCD Type 2 snapshots only |
+| `make dbt-docs` | `cd pipeline/dbt && uv run dbt docs ...` | Generate + serve lineage docs (localhost:8080) |
 | `make prefect-server` | `prefect server start --host 0.0.0.0` | Start local Prefect server (localhost:4200) |
 | `make prefect-flow` | `python orchestration/prefect/flows.py` | Run ELT flow once (manual trigger) |
 | `make prefect-serve` | `python orchestration/prefect/flows.py --serve` | Serve as daily 07:00 deployment |
@@ -74,28 +74,28 @@ docker compose down -v && docker compose up -d
 ```
 olist-ecommerce/
 ├── README.md
-├── Makefile               # short targets for common commands
-├── Dockerfile             # Python 3.12 + uv + deps (shared by seed + simulator)
-├── docker-compose.yaml    # Postgres + seed + simulator services
-├── pyproject.toml         # uv project + deps (incl. dbt-duckdb, orchestration groups)
-├── .env / .env.example    # DB credentials (gitignored)
-├── data/olist-dataset/    # 9 Olist CSVs (~121MB, gitignored)
-├── src/oltp/
-│   ├── schema.sql         # 9 tables, PKs, FKs, updated_at triggers
-│   ├── seed.py            # drop + create + COPY CSVs → Postgres
-│   └── simulator.py       # fake backend: new orders + anomalies
-├── src/dlt_pipeline/
-│   ├── dlt_pipeline.py    # dlt ELT: Postgres → DuckDB (incremental)
-│   └── .dlt/              # dlt config (empty secrets.toml, config.toml)
-├── dbt/                   # transformations: silver + gold + tests
-│   ├── dbt_project.yml    # per-layer materialization + schema config
-│   ├── profiles.yml       # DuckDB connection (points at warehouse file)
-│   ├── models/            # staging/ → intermediate/ → marts/
-│   ├── snapshots/         # orders snapshots (SCD Type 2)
-│   └── tests/generic/     # custom generic tests
-├── orchestration/         # Prefect: server + work pool + worker
+├── Makefile                  # short targets for common commands
+├── pyproject.toml            # uv project + deps (main, dbt-duckdb, orchestration groups)
+├── .env / .env.example       # DB credentials (gitignored)
+├── ecommerce_db/             # OLTP: postgres + seed + simulator (dockerized)
+│   ├── Dockerfile            # Python 3.12 + uv (shared by seed + simulator)
+│   ├── docker-compose.yaml   # Postgres (healthcheck) + seed + simulator
+│   ├── olist-dataset/        # 9 Olist CSVs (~121MB, gitignored)
+│   └── src/ecommerce_db/     # package: config, seed.py, simulator.py, helpers/
+├── pipeline/
+│   ├── src/pipeline/         # ELT package (installed via uv/hatch)
+│   │   ├── config.py         # pydantic-settings: Postgres / warehouse / pipeline
+│   │   └── ingestion.py      # dlt: Postgres → DuckDB bronze (entry: `ingest`)
+│   └── dbt/                  # transformations: silver + gold + tests
+│       ├── dbt_project.yml   # per-layer materialization + schema config
+│       ├── profiles.yml      # DuckDB connection (WAREHOUSE_LOCAL__PATH)
+│       ├── models/           # staging/ → intermediate/ → marts/
+│       ├── snapshots/        # orders snapshots (SCD Type 2)
+│       └── tests/generic/    # custom generic tests
+├── orchestration/
 │   └── prefect/
-│       └── flows.py       # elt_flow: dlt → dbt build (tasks, --serve)
+│       └── flows.py          # elt_flow: ingest → dbt build (tasks, --serve)
+├── data/warehouse/           # DuckDB ecommerce.duckdb (gitignored)
 └── docs/
     ├── oltp-guide.md      # schema, seed, and simulator decisions
     ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
