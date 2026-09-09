@@ -6,9 +6,9 @@ transitions, items, payments, reviews — plus backdated rows and
 anomalies that test data quality checks in later phases.
 
 Usage:
-    python src/olist/oltp/simulator.py              # 50 orders (default)
-    python src/olist/oltp/simulator.py --orders 100
-    python src/olist/oltp/simulator.py --continuous --interval 30
+    uv run simulate                             # 50 orders (default)
+    uv run simulate --orders 100
+    uv run simulate --continuous --interval 30
 """
 
 import argparse
