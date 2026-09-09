@@ -4,21 +4,19 @@
 .PHONY: up down db-init db-shell simulator dlt-pipeline dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker
 
 up:
-	docker compose up -d
+	cd ecommerce_db && docker compose up -d
 
 down:
-	docker compose down
+	cd ecommerce_db && docker compose down
 
 db-init:
-	docker compose run --rm seed
+	cd ecommerce_db && docker compose run --rm seed
 
 db-shell:
-	docker exec -it ecommerce_oltp psql \
-		-U $$(sed -n 's/^POSTGRES_USER=//p' .env | tr -d '\r' | xargs) \
-		-d $$(sed -n 's/^POSTGRES_DB=//p' .env | tr -d '\r' | xargs)
+	docker exec -it ecommerce_db psql -U postgres -d ecommerce
 
 simulator:
-	docker compose run --rm simulator
+	cd ecommerce_db && docker compose run --rm simulator
 
 # Run the dlt ELT pipeline: extract from Postgres -> load into DuckDB (bronze).
 dlt-pipeline:

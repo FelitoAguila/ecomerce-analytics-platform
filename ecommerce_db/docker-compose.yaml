@@ -1,7 +1,7 @@
 services:
   ecommerce_db:
-    container_name: ecommerce_db
     image: postgres:16-alpine
+    container_name: ecommerce_db
     restart: always
     environment:
       POSTGRES_USER: postgres
@@ -11,6 +11,42 @@ services:
       - "5432:5432"
     volumes:
       - ecommerce_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seed:
+    build:
+      context: ..
+      dockerfile: ecommerce_db/Dockerfile
+    container_name: ecommerce_seed
+    restart: "no"
+    command: ["uv", "run", "--no-sync", "seed"]
+    environment:
+      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      POSTGRES_DB__DATA_DIR: /data
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./olist-dataset:/data:ro
+    depends_on:
+      ecommerce_db:
+        condition: service_healthy
+
+  simulator:
+    build:
+      context: ..
+      dockerfile: ecommerce_db/Dockerfile
+    container_name: ecommerce_simulator
+    restart: "no"
+    command: ["uv", "run", "--no-sync", "simulate"]
+    environment:
+      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
 
 volumes:
   ecommerce_db:

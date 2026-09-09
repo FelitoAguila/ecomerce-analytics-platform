@@ -4,10 +4,16 @@ __pycache__
 *.pyc
 *.pyo
 .env
-data/olist-dataset
+ecommerce_db/olist-dataset
+data/warehouse
+orchestration
+reports
+prefect.yaml
+OPENCODE.txt
 images
 docs
 *.md
+!README.md
 .dockerignore
 .gitignore
 .python-version
