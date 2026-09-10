@@ -1,0 +1,39 @@
+name: ecommerce_db
+
+services:
+  prefect-server:
+    image: prefecthq/prefect:3.8.5-python3.12
+    container_name: prefect-server
+    restart: unless-stopped
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-server-data:/root/.prefect
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4200/api/health',timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  prefect-worker:
+    build:
+      context: ..
+      dockerfile: orchestration/Dockerfile
+    container_name: prefect-worker
+    restart: unless-stopped
+    command: ["uv", "run", "--no-sync", "prefect", "worker", "start", "--pool", "elt-pool"]
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ..:/app
+      - prefect-worker-cache:/root/.cache/uv
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+
+volumes:
+  prefect-server-data:
+  prefect-worker-cache:

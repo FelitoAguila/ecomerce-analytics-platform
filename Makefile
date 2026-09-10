@@ -1,7 +1,7 @@
 # Targets for dockerized OLTP + local ELT/transforms.
 # Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
 
-.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker
+.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run
 
 up:
 	cd ecommerce_db && docker compose up -d
@@ -81,3 +81,30 @@ prefect-deploy:
 # Start a worker that pulls from the work pool (its own terminal).
 prefect-worker:
 	uv run --no-sync prefect worker start --pool elt-pool
+
+# --- Containerized orchestration (docker compose; server + worker in containers) ---
+# Requires the OLTP stack up (ecommerce_db service) for the shared network.
+ORC := -f orchestration/docker-compose.yaml
+
+# Build + start the containerized Prefect server and worker.
+orc-up:
+	docker compose $(ORC) up -d --build
+
+# Stop the containerized Prefect stack (data volume is kept).
+orc-down:
+	docker compose $(ORC) down
+
+# Tail the worker logs (elt_flow runs: dlt -> dbt).
+orc-logs:
+	docker compose $(ORC) logs -f prefect-worker
+
+# Register the 'elt-daily' deployment (one-time; requires server up).
+orc-deploy:
+	docker compose $(ORC) run --rm --no-deps prefect-worker \
+		uv run --no-sync prefect deploy /app/orchestration/prefect/flows.py:elt_flow \
+		--name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
+
+# Trigger one run of the 'elt-daily' deployment now (manual verification).
+orc-run:
+	docker compose $(ORC) run --rm --no-deps prefect-worker \
+		uv run --no-sync prefect deployment run 'elt-daily'

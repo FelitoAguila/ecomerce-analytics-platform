@@ -68,7 +68,9 @@ Deployment is registered with the server, bound to a work pool. Worker polls the
 | File | Purpose |
 |---|---|
 | `orchestration/prefect/flows.py` | Flow + tasks (`run_dlt`, `run_dbt`, `elt_flow`); shells out to `uv run ingest` and `dbt build` |
-| `Makefile` | `prefect-*` targets; deployment config lives in the `prefect-deploy` target (no `prefect.yaml` needed) |
+| `orchestration/Dockerfile` | Worker image: Python 3.12 + uv, env at `/opt/venv` (main + dbt-duckdb + orchestration groups) |
+| `orchestration/docker-compose.yaml` | Server + worker containers (project `ecommerce_db`, joins the OLTP network) |
+| `Makefile` | `prefect-*` targets (host mode) and `orc-*` targets (container mode); deployment config lives in the `prefect-deploy`/`orc-deploy` targets (no `prefect.yaml` needed) |
 
 ## 5. Concurrency limit
 
@@ -121,6 +123,33 @@ make prefect-worker    # Terminal 2
 make prefect-deploy    # Run once to register deployment
 ```
 
+## 10b. Containerized orchestration (docker compose)
+
+The same server + worker pattern, but **both run in containers** — the worker executes the whole ELT (dlt + dbt subprocesses) inside Docker. Closest to the Phase 7 story (worker becomes a Cloud Run container).
+
+```yaml
+# orchestration/docker-compose.yaml  (name: ecommerce_db so it shares the OLTP network)
+prefect-server   # official prefecthq/prefect:3-latest-python3.12, localhost:4200, sqlite in a volume
+prefect-worker   # custom image (orchestration/Dockerfile), repo bind-mounted at /app
+```
+
+Why it works with zero flow changes: `flows.py` shells out to `uv run ingest` (cwd `/app`) and `dbt build` with `--env-file /app/.env` — both resolve inside the worker via the bind mount. `UV_PROJECT_ENVIRONMENT=/opt/venv` keeps the venv out of the mounted repo (no host `.venv` shadowing, no rebuild on code edits).
+
+```bash
+make orc-up        # build + start server & worker (provisions network; --build)
+make orc-deploy    # one-time: register the 'elt-daily' deployment
+make orc-run       # manual trigger of one run (or click Run in the UI)
+make orc-logs      # tail worker logs: dlt -> dbt -> "ELT flow complete"
+make orc-down      # stop both (volume keeps the server's history)
+```
+
+Pitfalls (only this containerized mode):
+
+- **Stop the host Prefect first** (`make prefect-server`/`prefect-worker` in their terminals) — port 4200 clashes, and the host and container servers have separate SQLite stores.
+- **DSN is overridden on purpose** in compose: `POSTGRES_DB__DSN=postgresql://postgres:postgres@ecommerce_db:5432/ecommerce`. The host `.env` says `localhost`, which is meaningless inside the worker; compose env wins over the `.env` file (pydantic-settings priority: OS env > dotenv).
+- **DuckDB single-writer still applies across the boundary** — don't run host `make ingest`/`dbt-build` while the worker is mid-flow.
+- **`docker compose down -v` deletes `prefect-server-data`** — deployment + run history gone; re-run `make orc-deploy`.
+
 ---
 
-*Last updated: Phase 5 (orchestration) — refreshed for the `pipeline/` layout (2026-09)*
+*Last updated: Phase 5 (orchestration) + containerized mode (2026-09)*
