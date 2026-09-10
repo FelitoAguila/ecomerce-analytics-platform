@@ -1,7 +1,7 @@
 # Targets for dockerized OLTP + local ELT/transforms.
 # Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
 
-.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run
+.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
 
 up:
 	cd ecommerce_db && docker compose up -d
@@ -108,3 +108,8 @@ orc-deploy:
 orc-run:
 	docker compose $(ORC) run --rm --no-deps prefect-worker \
 		uv run --no-sync prefect deployment run 'elt-daily'
+
+# --- Dashboard (Streamlit) ---
+# Reads the gold layer from the warehouse; backend chosen via DASHBOARD__SOURCE.
+dashboard:
+	uv run --group dashboard streamlit run dashboard/app.py

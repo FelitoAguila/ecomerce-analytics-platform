@@ -69,6 +69,7 @@ cd ecommerce_db && docker compose down -v && docker compose up -d
 | `make prefect-pool` | `uv run --no-sync prefect work-pool create --type process elt-pool` | Create process work pool (one-time) |
 | `make prefect-deploy` | `prefect deploy ... --name elt-daily --pool elt-pool` | Deploy flow to work pool |
 | `make prefect-worker` | `uv run --no-sync prefect worker start --pool elt-pool` | Start worker that pulls from pool |
+| `make dashboard` | `uv run --group dashboard streamlit run dashboard/app.py` | Launch the Streamlit dashboard (localhost:8501) |
 
 `make dbt-*` targets also pass `--group dbt-duckdb` (installs the adapter) and `--env-file ../../.env` (so `WAREHOUSE_LOCAL__PATH` reaches `profiles.yml`).
 
@@ -96,14 +97,22 @@ olist-ecommerce/
 │       ├── snapshots/        # orders snapshots (SCD Type 2)
 │       └── tests/generic/    # custom generic tests
 ├── orchestration/
-│   └── prefect/
-│       └── flows.py          # elt_flow: ingest → dbt build (tasks, --serve)
+│   ├── prefect/
+│   │   ├── flows.py          # elt_flow: ingest → dbt build (tasks, --serve)
+│   ├── Dockerfile            # worker image (server+worker stack, docker compose)
+│   └── docker-compose.yaml   # containerized Prefect (orchestration/docker-compose.yaml)
+├── dashboard/
+│   ├── app.py                # Streamlit entry (Overview / Orders / Geography)
+│   ├── query.py              # all SQL (portable dialect subset), config-driven table names
+│   ├── connection.py         # read-only connection + cached query helper
+│   └── views/                # one module per page
 ├── data/warehouse/           # DuckDB ecommerce.duckdb (gitignored)
 └── docs/
     ├── oltp-guide.md      # schema, seed, and simulator decisions
     ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
     ├── dbt-guide.md       # dbt layers, schema strategy, tests, snapshots
-    └── orchestration.md   # Prefect setup, Airflow mapping, WSL2 notes
+    ├── orchestration.md   # Prefect setup, Airflow mapping, WSL2 notes
+    └── dashboard.md       # Phase 6: Streamlit dashboard, config-driven backend
 ```
 
 ## Phase status
