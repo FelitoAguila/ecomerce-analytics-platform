@@ -15,8 +15,9 @@ db-init:
 db-shell:
 	docker exec -it ecommerce_db psql -U postgres -d ecommerce
 
+# Run simulator live: 10 orders, 10 seconds interval
 simulator:
-	cd ecommerce_db && docker compose run --rm simulator
+	cd ecommerce_db && docker compose run -d --no-deps --rm simulator uv run --no-sync simulate --orders 10 --continuous --interval 10
 
 # Run the dlt ELT pipeline: extract from Postgres -> load into DuckDB (bronze).
 # Runs from the repo root so pipeline.config reads the root .env.
