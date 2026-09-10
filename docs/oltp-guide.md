@@ -4,7 +4,7 @@ Everything about the Postgres OLTP layer: schema design, seeding, and live simul
 
 ---
 
-## 1. Schema (`src/oltp/schema.sql`)
+## 1. Schema (`ecommerce_db/src/ecommerce_db/helpers/schema.sql`)
 
 ### Table names
 
@@ -78,7 +78,7 @@ Why on all 9 tables and not just the ones the simulator mutates? Uniformity. Eve
 
 ---
 
-## 2. Seeding (`src/oltp/seed.py`)
+## 2. Seeding (`ecommerce_db/src/ecommerce_db/seed.py`)
 
 ### How it works
 
@@ -111,7 +111,7 @@ psycopg3 (the `psycopg` package) is **not** psycopg2. The COPY method is `cursor
 
 ---
 
-## 3. Simulator (`src/oltp/simulator.py`)
+## 3. Simulator (`ecommerce_db/src/ecommerce_db/simulator.py`)
 
 ### What it does
 
@@ -144,16 +144,17 @@ The simulator also advances 5 existing orders from `shipped` to `delivered` per 
 ### Usage
 
 ```bash
-docker compose up -d       # starts Postgres + seed + simulator (continuous)
-make db-shell              # open psql to explore
-make simulator             # run simulator once manually (Docker)
-uv run python src/oltp/simulator.py --orders 100   # run locally with uv
-uv run python src/oltp/simulator.py --continuous --interval 15   # continuous locally
+cd ecommerce_db && docker compose up -d     # starts Postgres; seed loads once, simulator runs one batch
+make db-shell                               # open psql to explore
+make simulator                              # run simulator once manually (Docker)
+uv run simulate                             # run locally from the repo root (50 orders)
+uv run simulate --orders 100
+uv run simulate --continuous --interval 15  # consecutive batches locally
 ```
 
 ### Continuous mode
 
-`--continuous` loops forever, generating batches at `--interval` seconds (default 30). This is how the Docker service runs — the OLTP is always live, just like a real production backend.
+`--continuous` loops forever, generating batches at `--interval` seconds (default 30), keeping the OLTP live like a real production backend. The Docker `simulator` service runs a **single batch and exits** (compose mounts the dataset only for seed; the simulator connects to Postgres over the compose network). Use `--continuous` locally when you want the database to keep generating data.
 
 ### Summary output
 

@@ -23,9 +23,10 @@ The 9 CSVs (~121MB total) are gitignored and not shipped with the repo.
 
 ```bash
 cp .env.example .env
-docker compose up -d
+cd ecommerce_db && docker compose up -d
 
-# Seed loads historical data once → simulator starts generating live data
+# Seed loads historical data once; simulator runs one batch and exits
+# (re-run batches with `make simulator`, or run it continuously locally)
 # Open a SQL shell to explore:
 make db-shell
 
@@ -36,24 +37,24 @@ make ingest
 make dbt-build
 
 # Stop everything:
-docker compose down
+cd ecommerce_db && docker compose down
 ```
 
 One-liner to reset from scratch:
 
 ```bash
-docker compose down -v && docker compose up -d
+cd ecommerce_db && docker compose down -v && docker compose up -d
 ```
 
 ## Makefile targets
 
 | Target | Command | Description |
 |---|---|---|
-| `make up` | `docker compose up -d` | Start the full OLTP stack |
-| `make down` | `docker compose down` | Stop everything |
-| `make db-init` | `docker compose run --rm seed` | Re-seed the database |
+| `make up` | `cd ecommerce_db && docker compose up -d` | Start the full OLTP stack |
+| `make down` | `cd ecommerce_db && docker compose down` | Stop everything |
+| `make db-init` | `cd ecommerce_db && docker compose run --rm seed` | Re-seed the database |
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
-| `make simulator` | `docker compose run --rm simulator` | Run simulator once (manual) |
+| `make simulator` | `cd ecommerce_db && docker compose run --rm simulator` | Run simulator once (manual) |
 | `make ingest` | `uv run ingest` | Run dlt ELT pipeline (Postgres → DuckDB bronze) |
 | `make dbt-debug` | `cd pipeline/dbt && uv run dbt debug` | Verify DuckDB connection + config |
 | `make dbt-parse` | `cd pipeline/dbt && uv run dbt parse` | Re-render project; catch YAML/syntax errors |
@@ -62,12 +63,14 @@ docker compose down -v && docker compose up -d
 | `make dbt-build` | `cd pipeline/dbt && uv run dbt build` | Full gate: models + snapshot + tests in order |
 | `make dbt-snapshot` | `cd pipeline/dbt && uv run dbt snapshot` | Run SCD Type 2 snapshots only |
 | `make dbt-docs` | `cd pipeline/dbt && uv run dbt docs ...` | Generate + serve lineage docs (localhost:8080) |
-| `make prefect-server` | `prefect server start --host 0.0.0.0` | Start local Prefect server (localhost:4200) |
-| `make prefect-flow` | `python orchestration/prefect/flows.py` | Run ELT flow once (manual trigger) |
-| `make prefect-serve` | `python orchestration/prefect/flows.py --serve` | Serve as daily 07:00 deployment |
-| `make prefect-pool` | `prefect work-pool create --type process elt-pool` | Create process work pool (one-time) |
+| `make prefect-server` | `uv run --no-sync prefect server start --host 0.0.0.0` | Start local Prefect server (localhost:4200) |
+| `make prefect-flow` | `uv run --group orchestration python orchestration/prefect/flows.py` | Run ELT flow once (manual trigger) |
+| `make prefect-serve` | `uv run --group orchestration python orchestration/prefect/flows.py --serve` | Serve as daily 07:00 deployment |
+| `make prefect-pool` | `uv run --no-sync prefect work-pool create --type process elt-pool` | Create process work pool (one-time) |
 | `make prefect-deploy` | `prefect deploy ... --name elt-daily --pool elt-pool` | Deploy flow to work pool |
-| `make prefect-worker` | `prefect worker start --pool elt-pool` | Start worker that pulls from pool |
+| `make prefect-worker` | `uv run --no-sync prefect worker start --pool elt-pool` | Start worker that pulls from pool |
+
+`make dbt-*` targets also pass `--group dbt-duckdb` (installs the adapter) and `--env-file ../../.env` (so `WAREHOUSE_LOCAL__PATH` reaches `profiles.yml`).
 
 ## Project structure
 

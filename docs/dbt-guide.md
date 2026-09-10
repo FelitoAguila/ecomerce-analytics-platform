@@ -9,7 +9,7 @@ Transformations: bronze (dlt-loaded) → silver (staging) → intermediate → g
 dbt reads the raw `ecommerce_data` schema in DuckDB (loaded by dlt) and builds a layered analytics model:
 
 ```
-DuckDB (load_ecommerce_data.duckdb)
+DuckDB (data/warehouse/ecommerce.duckdb)
 │
 ├── ecommerce_data   bronze — dlt raw tables (customers, orders, ...)
 │
@@ -21,7 +21,7 @@ DuckDB (load_ecommerce_data.duckdb)
 └── main_snapshots   SCD Type 2 history of orders (1 snapshot)
 ```
 
-Running `uv run dbt run` builds all models in dependency order. Running `dbt build` runs models **and** their data tests, plus the snapshot.
+Running `uv run dbt run` (from `pipeline/dbt/`) builds all models in dependency order. Running `dbt build` runs models **and** their data tests, plus the snapshot.
 
 ## 2. Layers
 
@@ -135,18 +135,19 @@ Test placement matches dbt convention: a `_<layer>__models.yml` co-located in ea
 
 ## 7. Usage
 
+The dbt project lives at `pipeline/dbt/` (it must be run from there — dbt 1.9+ has no `--project-dir`). The Makefile wraps all of this for you, so from the project root you can use `make dbt-*` directly:
+
 ```bash
-cd dbt
-uv run dbt debug                # verify connection & config
-uv run dbt run                  # build all models (views + tables)
-uv run dbt test                 # run all data tests
-uv run dbt build                # run + snapshot + test, in dependency order
-uv run dbt snapshot             # run snapshots only
-uv run dbt docs generate        # build docs for lineage (writes to target/)
-uv run dbt docs serve           # serve docs at http://localhost:8080
+cd pipeline/dbt
+uv run --group dbt-duckdb --env-file ../../.env dbt debug    # verify connection & config
+uv run --group dbt-duckdb --env-file ../../.env dbt run      # build all models (views + tables)
+uv run --group dbt-duckdb --env-file ../../.env dbt test     # run all data tests
+uv run --group dbt-duckdb --env-file ../../.env dbt build    # run + snapshot + test, in dependency order
+uv run --group dbt-duckdb --env-file ../../.env dbt snapshot # run snapshots only
+uv run --group dbt-duckdb --env-file ../../.env dbt docs ... # lineage docs
 ```
 
-From the project root, the Makefile wraps this: `make dbt` runs the project from the `dbt/` folder.
+From the project root, `make dbt-build` runs the full gate (models + snapshot + tests) with the same flags. The `--env-file ../../.env` makes the `WAREHOUSE_LOCAL__PATH` (and future cloud creds) available to `profiles.yml`; `--group dbt-duckdb` guarantees the adapter is installed.
 
 ## 8. Key design decisions
 
@@ -170,4 +171,4 @@ From the project root, the Makefile wraps this: `make dbt` runs the project from
 
 ---
 
-*Last updated: Phase 4 (dbt)*
+*Last updated: Phase 4 (dbt) — refreshed for the `pipeline/dbt/` layout (2026-09)*

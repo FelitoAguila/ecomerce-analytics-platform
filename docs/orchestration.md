@@ -11,10 +11,10 @@ Orchestrates two sequential tasks:
 ```
 elt_flow
   │
-  ├── run_dlt()    → cd src/dlt_pipeline && uv run python dlt_pipeline.py
+  ├── run_dlt()    → uv run ingest                 (cwd: repo root; reads root .env)
   │                  (incremental extract from Postgres → DuckDB bronze)
   │
-  └── run_dbt()    → cd dbt && uv run dbt build
+  └── run_dbt()    → cd pipeline/dbt && uv run --group dbt-duckdb dbt build
                      (models + snapshot + tests, the full gate)
 ```
 
@@ -67,9 +67,8 @@ Deployment is registered with the server, bound to a work pool. Worker polls the
 
 | File | Purpose |
 |---|---|
-| `orchestration/prefect/flows.py` | Flow + tasks (`run_dlt`, `run_dbt`, `elt_flow`) |
-| `prefect.yaml` | Deployment config (name, pool, schedule) |
-| `Makefile` | `prefect-*` targets |
+| `orchestration/prefect/flows.py` | Flow + tasks (`run_dlt`, `run_dbt`, `elt_flow`); shells out to `uv run ingest` and `dbt build` |
+| `Makefile` | `prefect-*` targets; deployment config lives in the `prefect-deploy` target (no `prefect.yaml` needed) |
 
 ## 5. Concurrency limit
 
@@ -83,7 +82,7 @@ Schedules use the server's local timezone by default (your machine: `America/Sao
 
 | Decision | Why |
 |---|---|
-| Subprocess, not Python imports | dlt needs `cwd=src/dlt_pipeline` for `.dlt/` config; dbt needs `cwd=dbt` (no `--project-dir` in 1.9+). Preserves verified behavior. Maps 1:1 to Airflow `BashOperator`. |
+| Subprocess, not Python imports | dlt runs as `uv run ingest` from the repo root (config reads the root `.env` via pydantic-settings); dbt runs from `pipeline/dbt` (no `--project-dir` in 1.9+) with `--env-file` pointing at the root `.env`. Preserves the verified commands; maps 1:1 to Airflow `BashOperator`. |
 | `dbt build` (not `run`) | Models + snapshot + tests in one gate — the full Phase 4 verification. |
 | `--group dbt-duckdb` in dbt task | Guarantees dbt is available even if the group isn't synced. Self-documenting. |
 | `limit=1` on deployment | DuckDB single-writer guarantee enforced at orchestration level. |
@@ -102,7 +101,7 @@ Schedules use the server's local timezone by default (your machine: `America/Sao
 | `@task` | Operator (BashOperator for subprocess) |
 | Work pool | Task queue |
 | Worker | Celery/Kubernetes executor |
-| `prefect.yaml` | `dag_bag` + deployment config |
+| `prefect deploy ...` (Makefile) | `dag_bag` + deployment config |
 | `flow.serve()` | `airflow dags trigger` + scheduler |
 | `PREFECT_API_URL` | `AIRFLOW__CORE__SQL_ALCHEMY_CONN` |
 
@@ -124,4 +123,4 @@ make prefect-deploy    # Run once to register deployment
 
 ---
 
-*Last updated: Phase 5 (orchestration)*
+*Last updated: Phase 5 (orchestration) — refreshed for the `pipeline/` layout (2026-09)*
