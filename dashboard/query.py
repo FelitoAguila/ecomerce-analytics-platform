@@ -1,6 +1,6 @@
 import streamlit as st
 
-from pipeline.config import get_settings
+from dashboard.settings import get_settings
 from dashboard.connection import get_connection
 
 

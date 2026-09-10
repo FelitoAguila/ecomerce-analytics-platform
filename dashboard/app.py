@@ -1,7 +1,7 @@
 import streamlit as st
 
 from dashboard.views import geography, orders, overview
-from pipeline.config import get_settings
+from dashboard.settings import get_settings
 
 st.set_page_config(
     page_title="Olist Analytics",

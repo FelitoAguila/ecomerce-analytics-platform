@@ -1,27 +1,21 @@
 from functools import lru_cache
 
 from pydantic import BaseModel, PostgresDsn
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from config.settings import ConfigBase
 
 
 class PostgresDB(BaseModel):
-    """ Seed Ecommerce Postgres DB """
+    """Seed Ecommerce Postgres DB"""
 
     dsn: PostgresDsn
     data_dir: str = "ecommerce_db/olist-dataset"
 
 
-class Settings(BaseSettings):
-    """ Project Settings """
+class Settings(ConfigBase):
+    """Seed Ecommerce Postgres DB"""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        env_nested_delimiter="__",
-        extra="ignore",
-    )
-
-    postgres_db: PostgresDB 
+    postgres_db: PostgresDB
 
 
 @lru_cache

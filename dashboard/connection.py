@@ -1,7 +1,7 @@
 import streamlit as st
 import duckdb
 
-from pipeline.config import get_settings
+from dashboard.settings import get_settings
 
 
 @st.cache_resource(show_spinner="Connecting to warehouse...")
