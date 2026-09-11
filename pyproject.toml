@@ -20,6 +20,7 @@ dependencies = [
 seed = "ecommerce_db.seed:main"
 simulate = "ecommerce_db.simulator:main"
 ingest = "pipeline.ingestion:main"
+elt = "pipeline.run_elt:main"
 
 [dependency-groups]
 dbt-duckdb = [

@@ -1,7 +1,7 @@
 # Targets for dockerized OLTP + local ELT/transforms.
 # Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
 
-.PHONY: up down db-init db-shell simulator ingest dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
+.PHONY: up down db-init db-shell simulator ingest elt dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
 
 up:
 	cd ecommerce_db && docker compose up -d
@@ -23,6 +23,10 @@ simulator:
 # Runs from the repo root so pipeline.config reads the root .env.
 ingest:
 	uv run ingest
+
+# Run the full ELT pipeline: dlt ingest -> dbt build (bronze/gold + tests).
+elt:
+	uv run elt
 
 # --- dbt (must run from the dbt project dir; dbt 1.9+ no longer accepts --project-dir) ---
 DBT := cd pipeline/dbt && uv run --group dbt-duckdb --env-file ../../.env dbt
