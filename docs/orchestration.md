@@ -10,12 +10,10 @@ Orchestrates two sequential tasks:
 
 ```
 elt_flow
-  │
-  ├── run_dlt()    → uv run ingest                 (cwd: repo root; reads root .env)
-  │                  (incremental extract from Postgres → DuckDB bronze)
-  │
-  └── run_dbt()    → cd pipeline/dbt && uv run --group dbt-duckdb dbt build
-                     (models + snapshot + tests, the full gate)
+  └── run_elt()  → uv run elt                           (cwd: repo root; reads root .env)
+                    ├── dlt ingest (incremental Postgres → DuckDB bronze)
+                    └── cd pipeline/dbt && uv run --group dbt-duckdb dbt build
+                        (models + snapshot + tests, the full gate)
 ```
 
 Sequential by design: dlt and dbt must never run concurrently (DuckDB single-writer rule).
@@ -67,7 +65,7 @@ Deployment is registered with the server, bound to a work pool. Worker polls the
 
 | File | Purpose |
 |---|---|
-| `orchestration/prefect/flows.py` | Flow + tasks (`run_dlt`, `run_dbt`, `elt_flow`); shells out to `uv run ingest` and `dbt build` |
+| `orchestration/prefect/flows.py` | Flow + task (`run_elt`, `elt_flow`); shells out to `uv run elt` |
 | `orchestration/Dockerfile` | Worker image: Python 3.12 + uv, env at `/opt/venv` (main + dbt-duckdb + orchestration groups) |
 | `orchestration/docker-compose.yaml` | Server + worker containers (project `ecommerce_db`, joins the OLTP network) |
 | `Makefile` | `prefect-*` targets (host mode) and `orc-*` targets (container mode); deployment config lives in the `prefect-deploy`/`orc-deploy` targets (no `prefect.yaml` needed) |
@@ -84,7 +82,7 @@ Schedules use the server's local timezone by default (your machine: `America/Sao
 
 | Decision | Why |
 |---|---|
-| Subprocess, not Python imports | dlt runs as `uv run ingest` from the repo root (config reads the root `.env` via pydantic-settings); dbt runs from `pipeline/dbt` (no `--project-dir` in 1.9+) with `--env-file` pointing at the root `.env`. Preserves the verified commands; maps 1:1 to Airflow `BashOperator`. |
+| Subprocess, not Python imports | The `elt` runner script (`uv run elt`) is the single entrypoint: dlt ingest then dbt build, each shelled out with their verified commands. Maps 1:1 to Airflow `BashOperator` and GCP Cloud Run job (see `docs/elt-runner.md`). |
 | `dbt build` (not `run`) | Models + snapshot + tests in one gate — the full Phase 4 verification. |
 | `--group dbt-duckdb` in dbt task | Guarantees dbt is available even if the group isn't synced. Self-documenting. |
 | `limit=1` on deployment | DuckDB single-writer guarantee enforced at orchestration level. |
@@ -129,7 +127,7 @@ The same server + worker pattern, but **both run in containers** — the worker 
 
 ```yaml
 # orchestration/docker-compose.yaml  (name: ecommerce_db so it shares the OLTP network)
-prefect-server   # official prefecthq/prefect:3-latest-python3.12, localhost:4200, sqlite in a volume
+prefect-server   # official prefecthq/prefect:3.8.5-python3.12, localhost:4200, sqlite in a volume
 prefect-worker   # custom image (orchestration/Dockerfile), repo bind-mounted at /app
 ```
 
@@ -149,6 +147,10 @@ Pitfalls (only this containerized mode):
 - **DSN is overridden on purpose** in compose: `POSTGRES_DB__DSN=postgresql://postgres:postgres@ecommerce_db:5432/ecommerce`. The host `.env` says `localhost`, which is meaningless inside the worker; compose env wins over the `.env` file (pydantic-settings priority: OS env > dotenv).
 - **DuckDB single-writer still applies across the boundary** — don't run host `make ingest`/`dbt-build` while the worker is mid-flow.
 - **`docker compose down -v` deletes `prefect-server-data`** — deployment + run history gone; re-run `make orc-deploy`.
+
+### See also
+
+For a standalone ELT runner image (no Prefect — baked code, one-shot `make elt-docker`), see [`docs/elt-runner.md`](elt-runner.md).
 
 ---
 

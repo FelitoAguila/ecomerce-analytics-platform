@@ -1,7 +1,7 @@
 # Targets for dockerized OLTP + local ELT/transforms.
 # Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
 
-.PHONY: up down db-init db-shell simulator ingest elt dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
+.PHONY: up down db-init db-shell simulator ingest elt elt-build elt-docker dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
 
 up:
 	cd ecommerce_db && docker compose up -d
@@ -27,6 +27,17 @@ ingest:
 # Run the full ELT pipeline: dlt ingest -> dbt build (bronze/gold + tests).
 elt:
 	uv run elt
+
+# --- Dockerized ELT runner (baked image; joins the OLTP network) ---
+ELTFILE := -f pipeline/docker-compose.yaml
+
+# Build the elt image (bakes the pipeline code + dbt project into the wheel).
+elt-build:
+	docker compose $(ELTFILE) build
+
+# Run the full ELT inside a one-shot container against the live OLTP.
+elt-docker:
+	docker compose $(ELTFILE) run --rm elt
 
 # --- dbt (must run from the dbt project dir; dbt 1.9+ no longer accepts --project-dir) ---
 DBT := cd pipeline/dbt && uv run --group dbt-duckdb --env-file ../../.env dbt

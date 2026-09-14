@@ -36,6 +36,9 @@ make ingest
 # Run dbt: build models + snapshot + tests (silver/gold layers)
 make dbt-build
 
+# Or the entire pipeline in one command (ingest → dbt, exit-code aware):
+make elt
+
 # Stop everything:
 cd ecommerce_db && docker compose down
 ```
@@ -56,6 +59,9 @@ cd ecommerce_db && docker compose down -v && docker compose up -d
 | `make db-shell` | `docker exec -it ... psql` | Open interactive SQL shell |
 | `make simulator` | `cd ecommerce_db && docker compose run --rm simulator` | Run simulator once (manual) |
 | `make ingest` | `uv run ingest` | Run dlt ELT pipeline (Postgres → DuckDB bronze) |
+| `make elt` | `uv run elt` | Full ELT: dlt ingest → dbt build (single runner, the everyday command) |
+| `make elt-build` | `docker compose -f pipeline/docker-compose.yaml build` | Build the ELT job image (`ecommerce_db-elt`) |
+| `make elt-docker` | `docker compose -f pipeline/docker-compose.yaml run --rm elt` | Run the full ELT inside a container, joined to the live OLTP network |
 | `make dbt-debug` | `cd pipeline/dbt && uv run dbt debug` | Verify DuckDB connection + config |
 | `make dbt-parse` | `cd pipeline/dbt && uv run dbt parse` | Re-render project; catch YAML/syntax errors |
 | `make dbt-run` | `cd pipeline/dbt && uv run dbt run` | Build all models (staging → intermediate → marts) |
@@ -71,7 +77,7 @@ cd ecommerce_db && docker compose down -v && docker compose up -d
 | `make prefect-worker` | `uv run --no-sync prefect worker start --pool elt-pool` | Start worker that pulls from pool |
 | `make dashboard` | `uv run --group dashboard streamlit run dashboard/app.py` | Launch the Streamlit dashboard (localhost:8501) |
 
-`make dbt-*` targets also pass `--group dbt-duckdb` (installs the adapter) and `--env-file ../../.env` (so `WAREHOUSE_LOCAL__PATH` reaches `profiles.yml`).
+`make dbt-*` targets also pass `--group dbt-duckdb` (installs the adapter) and `--env-file ../../.env` (so `WAREHOUSE_LOCAL__PATH` reaches `profiles.yml`). `make elt` wraps both stages with exit-code propagation; `make elt-docker` is the containerized version (docs: `docs/elt-runner.md`).
 
 ## Project structure
 
@@ -79,17 +85,21 @@ cd ecommerce_db && docker compose down -v && docker compose up -d
 olist-ecommerce/
 ├── README.md
 ├── Makefile                  # short targets for common commands
-├── pyproject.toml            # uv project + deps (main, dbt-duckdb, orchestration groups)
-├── .env / .env.example       # DB credentials (gitignored)
+├── pyproject.toml            # uv project + deps (main, dbt-duckdb, orchestration, dashboard groups)
+├── .env / .env.example       # DB credentials + warehouse path (gitignored)
+├── config/                   # shared settings foundation (ConfigBase, WarehouseLocal, GoldTableRefs)
 ├── ecommerce_db/             # OLTP: postgres + seed + simulator (dockerized)
 │   ├── Dockerfile            # Python 3.12 + uv (shared by seed + simulator)
 │   ├── docker-compose.yaml   # Postgres (healthcheck) + seed + simulator
 │   ├── olist-dataset/        # 9 Olist CSVs (~121MB, gitignored)
 │   └── src/ecommerce_db/     # package: config, seed.py, simulator.py, helpers/
 ├── pipeline/
+│   ├── Dockerfile            # baked ELT job image (`uv sync --frozen --group dbt-duckdb`)
+│   ├── docker-compose.yaml   # one-shot elt job: joins OLTP network, mounts warehouse + .env
 │   ├── src/pipeline/         # ELT package (installed via uv/hatch)
 │   │   ├── config.py         # pydantic-settings: Postgres / warehouse / pipeline
-│   │   └── ingestion.py      # dlt: Postgres → DuckDB bronze (entry: `ingest`)
+│   │   ├── ingestion.py      # dlt: Postgres → DuckDB bronze (entry: `ingest`)
+│   │   └── run_elt.py        # `uv run elt`: ingest → dbt build (--ingest-only / --dbt-only)
 │   └── dbt/                  # transformations: silver + gold + tests
 │       ├── dbt_project.yml   # per-layer materialization + schema config
 │       ├── profiles.yml      # DuckDB connection (WAREHOUSE_LOCAL__PATH)
@@ -112,7 +122,8 @@ olist-ecommerce/
     ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
     ├── dbt-guide.md       # dbt layers, schema strategy, tests, snapshots
     ├── orchestration.md   # Prefect setup, Airflow mapping, WSL2 notes
-    └── dashboard.md       # Phase 6: Streamlit dashboard, config-driven backend
+    ├── dashboard.md       # Phase 6: Streamlit dashboard, config-driven backend
+    └── elt-runner.md      # the `uv run elt` runner + Dockerized ELT job
 ```
 
 ## Phase status

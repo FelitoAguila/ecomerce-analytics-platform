@@ -8,6 +8,10 @@ ecommerce_db/olist-dataset
 data/warehouse
 orchestration
 pipeline/dbt
+!pipeline/dbt
+pipeline/dbt/target
+pipeline/dbt/logs
+pipeline/dbt/dbt_packages
 reports
 prefect.yaml
 OPENCODE.txt
