@@ -10,7 +10,7 @@ down:
 	cd ecommerce_db && docker compose down
 
 db-init:
-	cd ecommerce_db && docker compose run --rm seed
+	cd ecommerce_db && docker compose run --no-deps --rm seed 
 
 db-shell:
 	docker exec -it ecommerce_db psql -U postgres -d ecommerce

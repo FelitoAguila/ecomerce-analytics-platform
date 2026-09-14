@@ -23,9 +23,9 @@ services:
       dockerfile: ecommerce_db/Dockerfile
     container_name: ecommerce_seed
     restart: "no"
-    command: ["uv", "run", "--no-sync", "seed"]
+    command: ["uv", "run", "--no-sync", "seed", "--verify"]
     environment:
-      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:-postgresql://postgres:postgres@ecommerce_db:5432/ecommerce}
       POSTGRES_DB__DATA_DIR: /data
       PYTHONUNBUFFERED: "1"
     volumes:
@@ -42,7 +42,7 @@ services:
     restart: "no"
     command: ["uv", "run", "--no-sync", "simulate"]
     environment:
-      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:-postgresql://postgres:postgres@ecommerce_db:5432/ecommerce}
       PYTHONUNBUFFERED: "1"
     depends_on:
       seed:
