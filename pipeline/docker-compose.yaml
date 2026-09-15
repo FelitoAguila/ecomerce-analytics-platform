@@ -7,10 +7,10 @@ services:
       dockerfile: pipeline/Dockerfile
     environment:
       # Container networking: Postgres resolves via the shared OLTP network.
-      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:-postgresql://postgres:postgres@ecommerce_db:5432/ecommerce}
       # The warehouse lives on the host; mount it read-write so the dlt
       # watermark (inside the .duckdb file) survives across container runs.
-      WAREHOUSE_LOCAL__PATH: /app/data/warehouse/ecommerce.duckdb
+      WAREHOUSE_LOCAL__PATH: ${WAREHOUSE_LOCAL__PATH:-/app/data/warehouse/ecommerce.duckdb}
     volumes:
       # Read-only .env so `uv run --env-file /app/.env dbt` works; the
       # environment block above still wins (OS env > dotenv).
