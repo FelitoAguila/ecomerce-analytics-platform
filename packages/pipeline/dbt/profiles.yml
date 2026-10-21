@@ -2,6 +2,10 @@ olist_ecommerce:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: "{{ env_var('WAREHOUSE_LOCAL__PATH', '../../data/warehouse/ecommerce.duckdb') }}"
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('BIGQUERY__PROJECT') }}"
+      dataset: bronze_data
+      keyfile: "{{ env_var('BIGQUERY__KEYFILE') }}"
+      location: "{{ env_var('BIGQUERY__LOCATION', 'US') }}"
       threads: 4

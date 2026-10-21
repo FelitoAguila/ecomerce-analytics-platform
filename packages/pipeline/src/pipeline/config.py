@@ -1,9 +1,8 @@
 from functools import lru_cache
-from typing import Literal
 
 from pydantic import BaseModel, PostgresDsn
 
-from config.settings import ConfigBase, WarehouseLocal
+from config.settings import BigQuery, ConfigBase
 
 
 class PostgresDB(BaseModel):
@@ -16,8 +15,7 @@ class PipelineSettings(BaseModel):
     """Pipeline Settings"""
 
     name: str = "ecommerce_pipeline"
-    destination: Literal["duckdb", "bigquery"] = "duckdb"
-    dataset_name: str = "ecommerce_data"
+    dataset_name: str = "bronze_data"
 
 
 class Settings(ConfigBase):
@@ -25,7 +23,7 @@ class Settings(ConfigBase):
 
     postgres_db: PostgresDB
     pipeline: PipelineSettings = PipelineSettings()
-    warehouse_local: WarehouseLocal = WarehouseLocal()
+    bigquery: BigQuery
 
 
 @lru_cache

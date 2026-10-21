@@ -19,7 +19,7 @@ def page():
 
     monthly = query.monthly_metrics()
     monthly["month"] = pd.to_datetime(
-        dict(year=monthly["year"], month=monthly["month"], day=1)
+        {"year": monthly["year"], "month": monthly["month"], "day": 1}
     )
 
     c1, c2 = st.columns(2)

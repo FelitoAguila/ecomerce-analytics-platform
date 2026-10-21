@@ -1,13 +1,13 @@
 from functools import lru_cache
 
-from config.settings import ConfigBase, GoldTableRefs, WarehouseLocal
+from config.settings import BigQuery, ConfigBase, GoldTableRefs
 
 
 class Settings(ConfigBase):
     """Dashboard read settings."""
 
     dashboard: GoldTableRefs = GoldTableRefs()
-    warehouse_local: WarehouseLocal = WarehouseLocal()
+    bigquery: BigQuery
 
 
 @lru_cache

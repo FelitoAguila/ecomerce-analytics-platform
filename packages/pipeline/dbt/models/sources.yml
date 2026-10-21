@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: ecommerce_data
-    schema: ecommerce_data
+    schema: bronze_data
     loader: dlt
 
     freshness:

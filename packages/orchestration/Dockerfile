@@ -9,8 +9,9 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY README.md pyproject.toml uv.lock ./
-COPY pipeline/src/pipeline ./pipeline/src/pipeline
-COPY ecommerce_db/src/ecommerce_db ./ecommerce_db/src/ecommerce_db
+COPY pyproject.toml uv.lock ./
+COPY packages ./packages
 
-RUN uv sync --frozen --group dbt-duckdb --group orchestration
+# Orchestration (prefect) + the ELT package it triggers over subprocess, with
+# dbt available so `uv run elt` works from inside the worker.
+RUN uv sync --frozen --package olist-orchestration --package olist-pipeline --group dbt-bigquery

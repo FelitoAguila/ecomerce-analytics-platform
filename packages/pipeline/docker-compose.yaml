@@ -1,18 +1,16 @@
-name: ecommerce_db
-
 services:
   elt:
     build:
-      context: ..
-      dockerfile: pipeline/Dockerfile
+      context: ../..
+      dockerfile: packages/pipeline/Dockerfile
     environment:
-      # Container networking: Postgres resolves via the shared OLTP network.
-      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:-postgresql://postgres:postgres@ecommerce_db:5432/ecommerce}
-      # The warehouse lives on the host; mount it read-write so the dlt
-      # watermark (inside the .duckdb file) survives across container runs.
-      WAREHOUSE_LOCAL__PATH: ${WAREHOUSE_LOCAL__PATH:-/app/data/warehouse/ecommerce.duckdb}
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:?POSTGRES_DB__DSN is required}
+      BIGQUERY__PROJECT: ${BIGQUERY__PROJECT:?BIGQUERY__PROJECT is required}
+      BIGQUERY__LOCATION: ${BIGQUERY__LOCATION:-US}
+      BIGQUERY__KEYFILE: /app/secrets/gcp-sa.json
     volumes:
       # Read-only .env so `uv run --env-file /app/.env dbt` works; the
       # environment block above still wins (OS env > dotenv).
-      - ../.env:/app/.env:ro
-      - ../data/warehouse:/app/data/warehouse
+      - ../../.env:/app/.env:ro
+      # Service account key, mounted read-only; path matches BIGQUERY__KEYFILE.
+      - ${BIGQUERY__KEYFILE:?BIGQUERY__KEYFILE is required}:/app/secrets/gcp-sa.json:ro

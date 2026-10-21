@@ -1,8 +1,8 @@
 import sys
-from pathlib import Path
 
 import dlt
 from dlt.sources.sql_database import sql_database
+from google.oauth2 import service_account
 from sqlalchemy.engine import create_engine, make_url
 
 from pipeline.config import get_settings
@@ -19,12 +19,11 @@ ALL_TABLES = [
     "sellers",
 ]
 
+SCOPES = ["https://www.googleapis.com/auth/bigquery"]
+
 
 def main() -> None:
     settings = get_settings()
-
-    warehouse_path = Path(settings.warehouse_local.path)
-    warehouse_path.parent.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine(
         make_url(str(settings.postgres_db.dsn)).set(drivername="postgresql+psycopg")
@@ -37,9 +36,16 @@ def main() -> None:
             incremental=dlt.sources.incremental("updated_at")
         )
 
+    credentials = service_account.Credentials.from_service_account_file(
+        settings.bigquery.keyfile, scopes=SCOPES
+    )
+
     pipeline = dlt.pipeline(
         pipeline_name=settings.pipeline.name,
-        destination=dlt.destinations.duckdb(credentials=str(warehouse_path)),
+        destination=dlt.destinations.bigquery(
+            credentials=credentials,
+            location=settings.bigquery.location,
+        ),
         dataset_name=settings.pipeline.dataset_name,
     )
 

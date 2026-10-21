@@ -1,36 +1,53 @@
 import argparse
 import subprocess
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from config.paths import workspace_root
+
+PIPELINE = "olist-pipeline"
 
 
 def run_ingest() -> None:
     subprocess.run(
-        ["uv", "run", "ingest"],
-        cwd=REPO_ROOT,
+        ["uv", "run", "--package", PIPELINE, "ingest"],
+        cwd=workspace_root(),
         check=True,
     )
 
 
 def run_dbt() -> None:
+    root = workspace_root()
     subprocess.run(
         [
-            "uv", "run", "--group", "dbt-duckdb",
-            "--env-file", str(REPO_ROOT / ".env"),
-            "dbt", "build",
+            "uv",
+            "run",
+            "--package",
+            PIPELINE,
+            "--group",
+            "dbt-bigquery",
+            "--env-file",
+            str(root / ".env"),
+            "dbt",
+            "build",
         ],
-        cwd=REPO_ROOT / "pipeline" / "dbt",
+        cwd=root / "packages" / "pipeline" / "dbt",
         check=True,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the Olist ELT pipeline (dlt -> dbt).")
-    parser.add_argument("--ingest-only", action="store_true",
-                        help="Only run the dlt ingest, skip dbt build.")
-    parser.add_argument("--dbt-only", action="store_true",
-                        help="Only run the dbt build, skip the dlt ingest.")
+    parser = argparse.ArgumentParser(
+        description="Run the Olist ELT pipeline (dlt -> dbt)."
+    )
+    parser.add_argument(
+        "--ingest-only",
+        action="store_true",
+        help="Only run the dlt ingest, skip dbt build.",
+    )
+    parser.add_argument(
+        "--dbt-only",
+        action="store_true",
+        help="Only run the dbt build, skip the dlt ingest.",
+    )
     args = parser.parse_args()
 
     if args.ingest_only and args.dbt_only:

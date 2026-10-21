@@ -22,7 +22,7 @@ def page():
         st.subheader("Status over time (purchase cohort, current status)")
         cohort = query.status_by_month(start=params["start"], end=params["end"])
         cohort["month"] = pd.to_datetime(
-            dict(year=cohort["year"], month=cohort["month"], day=1)
+            {"year": cohort["year"], "month": cohort["month"], "day": 1}
         )
         if not cohort.empty:
             fig = px.area(

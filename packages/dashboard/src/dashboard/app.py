@@ -1,7 +1,7 @@
 import streamlit as st
 
-from dashboard.views import geography, orders, overview
 from dashboard.settings import get_settings
+from dashboard.views import geography, orders, overview
 
 st.set_page_config(
     page_title="Olist Analytics",
@@ -12,12 +12,7 @@ st.set_page_config(
 st.sidebar.title("Olist Analytics")
 settings = get_settings()
 st.sidebar.caption(
-    f"Source: {settings.dashboard.source}"
-    + (
-        f" ({settings.warehouse_local.path})"
-        if settings.dashboard.source == "duckdb"
-        else ""
-    )
+    f"Source: BigQuery ({settings.bigquery.project}.{settings.bigquery.location})"
 )
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()

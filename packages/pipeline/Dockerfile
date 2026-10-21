@@ -9,15 +9,10 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY README.md pyproject.toml uv.lock ./
-COPY config ./config
-COPY pipeline/src/pipeline ./pipeline/src/pipeline
-COPY pipeline/dbt ./pipeline/dbt
-COPY dashboard ./dashboard
-COPY ecommerce_db/src/ecommerce_db ./ecommerce_db/src/ecommerce_db
+COPY pyproject.toml uv.lock ./
+COPY packages ./packages
 
-# Main + dbt-duckdb groups: dlt (bronze) and dbt (silver/gold/tests). No dev/
-# orchestration/dashboard groups — this image is the ELT job, nothing more.
-RUN uv sync --frozen --group dbt-duckdb
+# dlt (bronze) + dbt (silver/gold/tests): this image is the ELT job, nothing more.
+RUN uv sync --frozen --package olist-pipeline --group dbt-bigquery
 
-ENTRYPOINT ["uv", "run", "--no-sync", "elt"]
+ENTRYPOINT ["uv", "run", "--no-sync", "--package", "olist-pipeline", "elt"]

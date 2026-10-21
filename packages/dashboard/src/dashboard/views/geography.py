@@ -10,7 +10,9 @@ def page():
     geo = query.geo_state_centroids()
     states = query.states_with_metrics()
 
-    merged = states.merge(geo, left_on="customer_state", right_on="geolocation_state", how="left")
+    merged = states.merge(
+        geo, left_on="customer_state", right_on="geolocation_state", how="left"
+    )
 
     st.subheader("Orders & revenue by state")
     if not merged.empty:

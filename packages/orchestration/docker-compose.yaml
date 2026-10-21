@@ -1,4 +1,4 @@
-name: ecommerce_db
+name: orchestration
 
 services:
   prefect-server:
@@ -18,17 +18,21 @@ services:
 
   prefect-worker:
     build:
-      context: ..
-      dockerfile: orchestration/Dockerfile
+      context: ../..
+      dockerfile: packages/orchestration/Dockerfile
     container_name: prefect-worker
     restart: unless-stopped
     command: ["uv", "run", "--no-sync", "prefect", "worker", "start", "--pool", "elt-pool"]
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
-      POSTGRES_DB__DSN: postgresql://postgres:postgres@ecommerce_db:5432/ecommerce
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:?POSTGRES_DB__DSN is required}
+      BIGQUERY__PROJECT: ${BIGQUERY__PROJECT:?BIGQUERY__PROJECT is required}
+      BIGQUERY__LOCATION: ${BIGQUERY__LOCATION:-US}
+      BIGQUERY__KEYFILE: /app/secrets/gcp-sa.json
       PYTHONUNBUFFERED: "1"
     volumes:
-      - ..:/app
+      - ../..:/app
+      - ${BIGQUERY__KEYFILE:?BIGQUERY__KEYFILE is required}:/app/secrets/gcp-sa.json:ro
       - prefect-worker-cache:/root/.cache/uv
     depends_on:
       prefect-server:

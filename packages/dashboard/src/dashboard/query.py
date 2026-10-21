@@ -1,7 +1,7 @@
 import streamlit as st
 
-from dashboard.settings import get_settings
 from dashboard.connection import get_connection
+from dashboard.settings import get_settings
 
 
 @st.cache_data(ttl=300, show_spinner="Querying warehouse...")
@@ -45,7 +45,7 @@ def kpis():
             round(avg(delivery_days), 1)            as avg_delivery_days,
             round(100.0 * count(*) filter (where order_status = 'delivered') / count(*), 1)
                                                     as delivered_pct
-        from {t['fct_orders']}
+        from {t["fct_orders"]}
         """
     )
 
@@ -70,7 +70,7 @@ def monthly_metrics(start: str | None = None, end: str | None = None):
             extract(month from order_purchase_timestamp) as month,
             count(*)                                     as orders,
             round(sum(order_total_value), 2)             as revenue
-        from {t['fct_orders']}
+        from {t["fct_orders"]}
         {where}
         group by 1, 2
         order by 1, 2
@@ -95,7 +95,7 @@ def status_funnel(start: str | None = None, end: str | None = None):
     return run(
         f"""
         select order_status, count(*) as orders
-        from {t['fct_orders']}
+        from {t["fct_orders"]}
         {where}
         group by order_status
         order by orders desc
@@ -124,7 +124,7 @@ def status_by_month(start: str | None = None, end: str | None = None):
             extract(month from order_purchase_timestamp) as month,
             order_status,
             count(*)                                     as orders
-        from {t['orders_snapshot']}
+        from {t["orders_snapshot"]}
         where dbt_valid_to is null
         {where}
         group by 1, 2, 3
@@ -143,7 +143,7 @@ def category_performance(limit: int = 12):
             count(*)                                                as items_sold,
             round(sum(price), 2)                                    as revenue,
             round(avg(price), 2)                                    as avg_price
-        from {t['order_items']}
+        from {t["order_items"]}
         group by 1
         order by revenue desc
         limit {int(limit)}
@@ -159,8 +159,8 @@ def delivery_by_category():
             coalesce(i.product_category_name_english, 'unclassified') as category,
             round(avg(o.delivery_days), 1)                            as avg_delivery_days,
             count(distinct o.order_id)                                as orders
-        from {t['order_items']} i
-        join {t['fct_orders']} o on i.order_id = o.order_id
+        from {t["order_items"]} i
+        join {t["fct_orders"]} o on i.order_id = o.order_id
         where o.delivery_days is not null
         group by 1
         having count(distinct o.order_id) >= 100
@@ -177,7 +177,7 @@ def payment_split():
             payment_type,
             round(sum(payment_value), 2) as revenue,
             round(sum(payment_value) / sum(sum(payment_value)) over () * 100, 1) as share_pct
-        from {t['fct_order_payments']}
+        from {t["fct_order_payments"]}
         group by payment_type
         order by revenue desc
         """
@@ -192,7 +192,7 @@ def installments_distribution():
             payment_installments,
             count(*)                        as payments,
             round(sum(payment_value), 2)    as revenue
-        from {t['fct_order_payments']}
+        from {t["fct_order_payments"]}
         group by payment_installments
         order by payment_installments
         """
@@ -209,8 +209,8 @@ def top_sellers(limit: int = 10):
             coalesce(s.seller_state, 'unknown')     as seller_state,
             round(sum(i.price), 2)                  as revenue,
             count(distinct i.order_id)              as orders
-        from {t['order_items']} i
-        left join {t['dim_sellers']} s on i.seller_id = s.seller_id
+        from {t["order_items"]} i
+        left join {t["dim_sellers"]} s on i.seller_id = s.seller_id
         group by 1, 2, 3
         order by revenue desc
         limit {int(limit)}
@@ -227,8 +227,8 @@ def states_with_metrics():
             count(distinct c.customer_unique_id)    as customers,
             count(distinct f.order_id)              as orders,
             round(sum(f.order_total_value), 2)      as revenue
-        from {t['fct_orders']} f
-        join {t['dim_customers']} c
+        from {t["fct_orders"]} f
+        join {t["dim_customers"]} c
             on f.customer_unique_id = c.customer_unique_id
         group by 1
         order by revenue desc
@@ -244,7 +244,7 @@ def geo_state_centroids():
             geolocation_state,
             avg(avg_lat) as lat,
             avg(avg_lng) as lng
-        from {t['geolocation']}
+        from {t["geolocation"]}
         group by 1
         """
     )
@@ -258,7 +258,7 @@ def top_cities(limit: int = 10):
             customer_city,
             customer_state,
             count(distinct customer_unique_id) as customers
-        from {t['dim_customers']}
+        from {t["dim_customers"]}
         group by 1, 2
         order by customers desc
         limit {int(limit)}
