@@ -19,10 +19,10 @@ select
     orders.order_delivered_customer_date,
     orders.order_estimated_delivery_date,
     -- derived metrics (business logic lives here)
-    datediff('day', orders.order_purchase_timestamp,
-             orders.order_delivered_customer_date) as delivery_days,
-    datediff('hour', orders.order_purchase_timestamp,
-             orders.order_approved_at) as approval_hours
+    date_diff(orders.order_delivered_customer_date, orders.order_purchase_timestamp, day)
+        as delivery_days,
+    timestamp_diff(orders.order_approved_at, orders.order_purchase_timestamp, hour)
+        as approval_hours
 from orders
 left join customers
     on orders.customer_id = customers.customer_id

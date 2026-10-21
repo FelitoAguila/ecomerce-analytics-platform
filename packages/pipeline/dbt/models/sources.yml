@@ -5,10 +5,31 @@ sources:
     schema: bronze_data
     loader: dlt
 
-    freshness:
-      warn_after: {count: 24, period: hour}
-      error_after: {count: 72, period: hour}
-    loaded_at_field: updated_at
+    config:
+      freshness:
+        warn_after: {count: 24, period: hour}
+        error_after: {count: 72, period: hour}
+      loaded_at_field: updated_at
+
+    tables:
+      - name: orders
+      - name: customers
+      - name: sellers
+      - name: products
+      - name: geolocation
+      - name: order_items
+      - name: order_payments
+      - name: reviews
+      - name: product_category_name_translation
+
+  - name: ecommerce_data_reconcile
+    schema: bronze_reconcile
+    loader: dlt
+    description: >
+      Reconciliation dataset. The dlt backfill run re-reads a bounded window of
+      the source and merges it by primary key, so every key appears at most once
+      with its most recent version. Rows that the incremental watermark skipped
+      are recovered here and reach the silver layer through the staging models.
 
     tables:
       - name: orders

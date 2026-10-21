@@ -1,8 +1,11 @@
 with source as (
-    select * from {{ source('ecommerce_data', 'order_payments') }}
+
+    {{ olist_staging_source('order_payments') }}
+
 ),
 
 deduplicated as (
+
     select
         order_id,
         payment_sequential,
@@ -15,6 +18,7 @@ deduplicated as (
             order by updated_at desc
         ) as rn
     from source
+
 )
 
 select

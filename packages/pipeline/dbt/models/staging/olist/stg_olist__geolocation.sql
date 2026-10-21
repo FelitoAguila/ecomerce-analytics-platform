@@ -1,8 +1,11 @@
 with source as (
-    select * from {{ source('ecommerce_data', 'geolocation') }}
+
+    {{ olist_staging_source('geolocation') }}
+
 ),
 
-renamed as (
+deduplicated as (
+
     select
         geolocation_id,
         geolocation_zip_code_prefix,
@@ -10,8 +13,22 @@ renamed as (
         geolocation_lng,
         geolocation_city,
         geolocation_state,
-        updated_at
+        updated_at,
+        row_number() over (
+            partition by geolocation_id
+            order by updated_at desc
+        ) as rn
     from source
+
 )
 
-select * from renamed
+select
+    geolocation_id,
+    geolocation_zip_code_prefix,
+    geolocation_lat,
+    geolocation_lng,
+    geolocation_city,
+    geolocation_state,
+    updated_at
+from deduplicated
+where rn = 1

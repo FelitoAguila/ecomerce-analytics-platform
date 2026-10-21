@@ -1,13 +1,26 @@
 with source as (
-    select * from {{ source('ecommerce_data', 'product_category_name_translation') }}
+
+    {{ olist_staging_source('product_category_name_translation') }}
+
 ),
 
-renamed as (
+deduplicated as (
+
     select
         product_category_name,
         product_category_name_english,
-        updated_at
+        updated_at,
+        row_number() over (
+            partition by product_category_name
+            order by updated_at desc
+        ) as rn
     from source
+
 )
 
-select * from renamed
+select
+    product_category_name,
+    product_category_name_english,
+    updated_at
+from deduplicated
+where rn = 1

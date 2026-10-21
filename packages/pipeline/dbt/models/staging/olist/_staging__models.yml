@@ -13,7 +13,7 @@ models:
         description: "Stable identifier for the real customer (may repeat across orders)."
         data_tests:
           - not_null
-  
+
   - name: stg_olist__sellers
     description: "Cleaned sellers, one row per seller record."
     columns:
@@ -31,7 +31,7 @@ models:
         data_tests:
           - unique
           - not_null
-  
+
   - name: stg_olist__orders
     description: "Cleaned orders, one row per order record."
     columns:
@@ -45,18 +45,20 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: source('ecommerce_data', 'customers')
-              field: customer_id
+              arguments:
+                to: ref('stg_olist__customers')
+                field: customer_id
       - name: order_status
         description: "Status of the order. Only a set of values is allowed."
         data_tests:
           - accepted_values:
-              values: ['created', 'approved', 'invoiced', 'processing', 'shipped', 'delivered', 'canceled', 'unavailable']
+              arguments:
+                values: ['created', 'approved', 'invoiced', 'processing', 'shipped', 'delivered', 'canceled', 'unavailable']
       - name: order_purchase_timestamp
         description: "Timestamp when the order was purchased."
         data_tests:
           - not_null
-  
+
   - name: stg_olist__order_items
     description: "Cleaned order items, one row per order item from an order."
     columns:
@@ -65,20 +67,23 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: source('ecommerce_data', 'orders')
-              field: order_id
+              arguments:
+                to: ref('stg_olist__orders')
+                field: order_id
       - name: product_id
         description: "Foreign key. Unique identifier for the product that is being ordered."
         data_tests:
           - relationships:
-              to: source('ecommerce_data', 'products')
-              field: product_id
+              arguments:
+                to: ref('stg_olist__products')
+                field: product_id
       - name: seller_id
         description: "Foreign key. Unique identifier for the seller that is selling the product."
         data_tests:
           - relationships:
-              to: source('ecommerce_data', 'sellers')
-              field: seller_id
+              arguments:
+                to: ref('stg_olist__sellers')
+                field: seller_id
       - name: price
         description: "Price of the product in the order item."
         data_tests:
@@ -92,13 +97,15 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: source('ecommerce_data', 'orders')
-              field: order_id
+              arguments:
+                to: ref('stg_olist__orders')
+                field: order_id
       - name: payment_type
         description: "Type of payment used for the order. Only a set of values is allowed."
         data_tests:
           - accepted_values:
-              values: ['credit_card', 'boleto', 'voucher', 'debit_card', 'not_defined']
+              arguments:
+                values: ['credit_card', 'boleto', 'voucher', 'debit_card', 'not_defined']
       - name: payment_value
         description: "Value of the payment made for the order."
         data_tests:
@@ -112,15 +119,19 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: source('ecommerce_data', 'orders')
-              field: order_id
+              arguments:
+                to: ref('stg_olist__orders')
+                field: order_id
       - name: review_score
         description: "Score given by the customer to the order, from 1 to 5. Nulls are allowed."
         data_tests:
           - accepted_values:
-              values: [1, 2, 3, 4, 5]
-              where: "review_score is not null"
-  
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+              config:
+                where: "review_score is not null"
+
   - name: stg_olist__geolocation
     description: "Cleaned geolocation, one row per geolocation record."
     columns:

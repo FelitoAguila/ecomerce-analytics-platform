@@ -1,4 +1,4 @@
-# Olist E-Commerce — Data Engineering Portfolio
+# Olist E-Commerce — Analytics Platform
 
 A simulated Brazilian e-commerce OLTP database (Postgres on Neon, ~100k orders)
 with an analytics pipeline feeding a BigQuery warehouse, dbt transformations,
