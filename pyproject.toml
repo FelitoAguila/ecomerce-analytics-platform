@@ -1,47 +1,36 @@
 [project]
 name = "olist-ecommerce"
 version = "0.1.0"
-description = "Data engineering portfolio project"
+description = "Data engineering portfolio project: simulated Olist e-commerce + analytics platform"
 readme = "README.md"
-authors = [
-    { name = "Felix Manuel Aguila Alonso", email = "feloaguila@gmail.com" }
-]
 requires-python = ">=3.12"
 dependencies = [
-    "dlt[duckdb,sql-database]>=1.30.0",
-    "pg8000>=1.31.5",
-    "psycopg[binary]>=3.3.4",
-    "pydantic>=2.13.5",
-    "pydantic-settings>=2.15.0",
-    "python-dotenv>=1.2.2",
+    "olist-ecommerce-database",
+    "olist-pipeline",
+    "olist-dashboard",
+    "olist-orchestration",
+    "global-config",
 ]
-
-[project.scripts]
-seed = "ecommerce_db.seed:main"
-simulate = "ecommerce_db.simulator:main"
-ingest = "pipeline.ingestion:main"
-elt = "pipeline.run_elt:main"
 
 [dependency-groups]
-dbt-duckdb = [
-    "dbt-duckdb>=1.11.0",
-]
 dev = [
-    "ipykernel>=7.3.0",
-]
-orchestration = [
-    "prefect>=3.1.16",
-]
-dashboard = [
-    "streamlit>=1.41.0",
-    "plotly>=6.0.0",
-    "pandas>=2.2.0",
+    "ruff>=0.6",
+    "pytest>=8.0",
+    "pre-commit>=3.0",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["pipeline/src/pipeline", "ecommerce_db/src/ecommerce_db", "dashboard", "config"]
+[tool.uv.sources]
+olist-ecommerce-database = { workspace = true }
+olist-pipeline = { workspace = true }
+olist-dashboard = { workspace = true }
+olist-orchestration = { workspace = true }
+global-config = { workspace = true }
 
+[tool.ruff]
+src = ["packages/*/src"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "ecommerce_db", "pipeline", "dashboard", "orchestration"]

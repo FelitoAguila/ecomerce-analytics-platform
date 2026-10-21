@@ -1,131 +1,134 @@
-# Targets for dockerized OLTP + local ELT/transforms.
-# Usage: make <target>  (e.g. make db-shell, make dlt-pipeline, make dbt-build)
+# Targets for the Neon-backed OLTP, BigQuery ELT, orchestration, and dashboard.
+# Usage: make <target>   (e.g. make seed, make elt, make dashboard)
+#
+# Run all targets from the repo root.
 
-.PHONY: up down db-init db-shell simulator ingest elt elt-build elt-docker dbt dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard
+.PHONY: help docker-build seed simulate simulate-logs simulate-once seed-local ingest elt elt-build elt-docker dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard lint format
 
-up:
-	cd ecommerce_db && docker compose up -d
+# --- Dockerized OLTP (Neon-backed; see packages/ecommerce_db/README.md) ---
+# --env-file .env lets Compose interpolate ${...} from the repo-root .env.
+OLTP := -f packages/ecommerce_db/docker-compose.yaml --env-file .env
 
-down:
-	cd ecommerce_db && docker compose down
+help:
+	@grep -E '^[a-zA-Z_-]+:' $(MAKEFILE_LIST) | sort | awk -F: '{printf "  %-18s\n", $$1}'
 
-db-init:
-	cd ecommerce_db && docker compose run --no-deps --rm seed 
+# Build the seeder/simulator image (shared by both services).
+docker-build:
+	docker compose $(OLTP) build
 
-db-shell:
-	docker exec -it ecommerce_db psql -U postgres -d ecommerce
+# Seed Neon: one-shot job, with row-count verification.
+seed:
+	docker compose $(OLTP) run --rm seed
 
-# Run simulator live: 10 orders, 10 seconds interval
-simulator:
-	cd ecommerce_db && docker compose run -d --no-deps --rm simulator uv run --no-sync simulate --orders 10 --continuous --interval 10
+# Continuous simulator (compose default: 100 orders every 20s), detached.
+simulate:
+	docker compose $(OLTP) up -d simulate
 
-# Run the dlt ELT pipeline: extract from Postgres -> load into DuckDB (bronze).
-# Runs from the repo root so pipeline.config reads the root .env.
+# Follow the simulator logs.
+simulate-logs:
+	docker compose $(OLTP) logs -f simulate
+
+# Run a single simulator batch locally (via uv), 50 orders.
+simulate-once:
+	uv run --package olist-ecommerce-database simulate --orders 50
+
+# Seed locally (via uv) instead of Docker.
+seed-local:
+	uv run --package olist-ecommerce-database seed --verify
+
+# --- ELT: dlt ingest -> dbt build (Neon -> BigQuery) ---
+# Extract from Postgres -> load into BigQuery bronze.
 ingest:
-	uv run ingest
+	uv run --package olist-pipeline ingest
 
-# Run the full ELT pipeline: dlt ingest -> dbt build (bronze/gold + tests).
+# Full ELT: dlt ingest -> dbt build (bronze/silver/gold + tests).
 elt:
-	uv run elt
+	uv run --package olist-pipeline elt
 
-# --- Dockerized ELT runner (baked image; joins the OLTP network) ---
-ELTFILE := -f pipeline/docker-compose.yaml
+# --- Dockerized ELT runner (baked image; runs dlt -> dbt against Neon/BigQuery) ---
+ELTFILE := -f packages/pipeline/docker-compose.yaml --env-file .env
 
-# Build the elt image (bakes the pipeline code + dbt project into the wheel).
 elt-build:
 	docker compose $(ELTFILE) build
 
-# Run the full ELT inside a one-shot container against the live OLTP.
 elt-docker:
 	docker compose $(ELTFILE) run --rm elt
 
-# --- dbt (must run from the dbt project dir; dbt 1.9+ no longer accepts --project-dir) ---
-DBT := cd pipeline/dbt && uv run --group dbt-duckdb --env-file ../../.env dbt
+# --- dbt (must run from the dbt project dir; dbt 1.9+ dropped --project-dir) ---
+DBT := cd packages/pipeline/dbt && uv run --package olist-pipeline --group dbt-bigquery --env-file $(CURDIR)/.env dbt
 
-# Verify the DuckDB connection and project config.
 dbt-debug:
 	$(DBT) debug
 
-# Re-render project (catch YAML/syntax errors) without running models.
 dbt-parse:
 	$(DBT) parse
 
-# Build all models: staging (view) -> intermediate (view) -> marts (table).
 dbt-run:
 	$(DBT) run
 
-# Run all data tests (unique/not_null/relationships/custom) against built models.
 dbt-test:
 	$(DBT) test
 
-# Full gate: run models + snapshot + tests in dependency order.
 dbt-build:
 	$(DBT) build
 
-# Run SCD Type 2 snapshots only.
 dbt-snapshot:
 	$(DBT) snapshot
 
-# Generate docs + lineage (writes to dbt/target/) and serve them locally.
 dbt-docs:
 	$(DBT) docs generate
 	$(DBT) docs serve --port 8080
 
 # --- Prefect orchestration (local server + work pool) ---
 PREFECT := uv run --no-sync prefect
+FLOWS := uv run --package olist-orchestration python -m orchestration.flows
 
-# Start the local Prefect server (its own terminal; accessible at localhost:4200).
 prefect-server:
 	$(PREFECT) server start --host 0.0.0.0
 
-# Run the ELT flow once (manual trigger; appears in UI if server is up).
 prefect-flow:
-	uv run --group orchestration python orchestration/prefect/flows.py
+	$(FLOWS)
 
-# Serve the flow as the 'elt-daily' deployment (daily 07:00; its own terminal).
 prefect-serve:
-	uv run --group orchestration python orchestration/prefect/flows.py --serve
+	$(FLOWS) --serve
 
-# Create the process work pool (one-time setup).
 prefect-pool:
 	$(PREFECT) work-pool create --type process elt-pool
 
-# Deploy the flow to the work pool (registers deployment with server).
 prefect-deploy:
-	uv run --group orchestration prefect deploy orchestration/prefect/flows.py:elt_flow --name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
+	uv run --package olist-orchestration prefect deploy packages/orchestration/src/orchestration/flows.py:elt_flow --name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
 
-# Start a worker that pulls from the work pool (its own terminal).
 prefect-worker:
-	uv run --no-sync prefect worker start --pool elt-pool
+	$(PREFECT) worker start --pool elt-pool
 
-# --- Containerized orchestration (docker compose; server + worker in containers) ---
-# Requires the OLTP stack up (ecommerce_db service) for the shared network.
-ORC := -f orchestration/docker-compose.yaml
+# --- Containerized orchestration (docker compose; server + worker) ---
+ORC := -f packages/orchestration/docker-compose.yaml --env-file .env
 
-# Build + start the containerized Prefect server and worker.
 orc-up:
 	docker compose $(ORC) up -d --build
 
-# Stop the containerized Prefect stack (data volume is kept).
 orc-down:
 	docker compose $(ORC) down
 
-# Tail the worker logs (elt_flow runs: dlt -> dbt).
 orc-logs:
 	docker compose $(ORC) logs -f prefect-worker
 
-# Register the 'elt-daily' deployment (one-time; requires server up).
 orc-deploy:
 	docker compose $(ORC) run --rm --no-deps prefect-worker \
-		uv run --no-sync prefect deploy /app/orchestration/prefect/flows.py:elt_flow \
+		uv run --no-sync prefect deploy /app/packages/orchestration/src/orchestration/flows.py:elt_flow \
 		--name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
 
-# Trigger one run of the 'elt-daily' deployment now (manual verification).
 orc-run:
 	docker compose $(ORC) run --rm --no-deps prefect-worker \
 		uv run --no-sync prefect deployment run 'elt-daily'
 
-# --- Dashboard (Streamlit) ---
-# Reads the gold layer from the warehouse; backend chosen via DASHBOARD__SOURCE.
+# --- Dashboard (Streamlit; reads BigQuery gold) ---
 dashboard:
-	uv run --group dashboard streamlit run dashboard/app.py
+	uv run --package olist-dashboard streamlit run packages/dashboard/src/dashboard/app.py
+
+# --- Code quality ---
+lint:
+	uv run ruff check .
+
+format:
+	uv run ruff format .

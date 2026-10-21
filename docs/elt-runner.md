@@ -11,9 +11,9 @@ Phase 6 serving work surfaced the need for a reproducible, orchestration-free wa
 ```
 uv run elt
 ├── dlt ingest                     cwd: repo root (reads root .env via pydantic-settings)
-│   incremental Postgres → DuckDB bronze (ecommerce_data schema)
-└── dbt build                      cwd: pipeline/dbt
-    models (views + marts) → snapshot (SCD2) → 92 tests, the full gate
+│   incremental Postgres → BigQuery bronze (bronze_data dataset)
+└── dbt build                      cwd: packages/pipeline/dbt
+    models (views + marts) → snapshot (SCD2) → 73 tests, the full gate
 ```
 
 Usage:
@@ -31,25 +31,26 @@ Exit code is propagated: a failing dlt job or failing dbt test exits non-zero �
 
 | File | Purpose |
 |---|---|
-| `pipeline/src/pipeline/run_elt.py` | The runner: `run_ingest()` + `run_dbt()` + `main()`; console script `elt` in `pyproject.toml` |
-| `orchestration/prefect/flows.py` | `run_elt` task shells out to `uv run elt` (no duplicated subprocess logic) |
-| `pipeline/Dockerfile` | Baked job image: project wheel (config/pipeline/dashboard/ecommerce_db) + the dbt project; `ENTRYPOINT uv run --no-sync elt` |
-| `pipeline/docker-compose.yaml` | One-shot `elt` job: joins the OLTP network, mounts the warehouse + `.env` |
+| `packages/pipeline/src/pipeline/run_elt.py` | The runner: `run_ingest()` + `run_dbt()` + `main()`; console script `elt` in `pyproject.toml` |
+| `packages/orchestration/src/orchestration/flows.py` | `run_elt` task shells out to `uv run elt` (no duplicated subprocess logic) |
+| `packages/pipeline/Dockerfile` | Baked job image: project wheel (config/pipeline/dashboard/ecommerce_db) + the dbt project; `ENTRYPOINT uv run --no-sync --package olist-pipeline elt` |
+| `packages/pipeline/docker-compose.yaml` | One-shot `elt` job: `BIGQUERY__*` env + SA key mount + `.env` |
 
 ## 3. Dockerized ELT (`make elt-docker`)
 
-Why a container at all (the host `uv run elt` already works): reproducibility and it's the exact shape of a Phase 7 GCP **Cloud Run job** — code baked, env passed by the orchestrator, state in persistent storage.
+Why a container at all (the host `uv run elt` already works): reproducibility and it's the exact shape of a Phase 7 GCP **Cloud Run job** — code baked, env passed by the orchestrator, state in BigQuery.
 
 ```bash
-make elt-build    # build image ecommerce_db-elt (uv sync --frozen --group dbt-duckdb)
-make elt-docker   # one-shot run against the live OLTP stack
+make elt-build    # build the ELT job image (uv sync --frozen --group dbt-bigquery)
+make elt-docker   # one-shot run against Neon + BigQuery
 ```
 
-How it wires up (all in `pipeline/docker-compose.yaml`):
+How it wires up (all in `packages/pipeline/docker-compose.yaml`):
 
-- `name: ecommerce_db` → the job joins the existing `ecommerce_db_default` network, so the DSN resolves `postgresql://...@ecommerce_db:5432/ecommerce`.
-- `WAREHOUSE_LOCAL__PATH=/app/data/warehouse/ecommerce.duckdb` with `../data/warehouse:/app/data/warehouse` mounted — the DuckDB file lives on the host, so the **dlt watermark travels with it** and container runs stay incremental.
+- `POSTGRES_DB__DSN` (Neon) and `BIGQUERY__PROJECT`/`BIGQUERY__LOCATION` come from the repo-root `.env` via `--env-file .env` interpolation.
+- The service-account key is mounted read-only at `/app/secrets/gcp-sa.json` and pointed to by `BIGQUERY__KEYFILE`.
 - `.env` is mounted read-only so `uv run --env-file /app/.env dbt` works; the compose `environment:` block still wins (OS env > dotenv, same rule as the Prefect worker).
+- No warehouse volume: BigQuery holds the data and the dlt watermark state, so container runs stay incremental automatically.
 
 Why the image is *baked*, not bind-mounted: it stays Cloud Run-shaped (build → run anywhere). The Prefect worker, by contrast, bind-mounts the repo for hot code reloading — two different trade-offs for two different tools.
 
@@ -67,8 +68,8 @@ Airflow (Phase 7 comparison) will shell out to `uv run elt` the same way — a `
 
 ## 5. Rules that still apply
 
-- **DuckDB single-writer**: don't run `elt-docker` while host `make ingest`/`dbt-build` or the dashboard is mid-read (host and container share the same warehouse file).
-- **OLTP must be up**: the job reads Postgres; the simulator's continuous mode is a prerequisite for new rows.
+- **Neon + BigQuery creds**: the job needs a reachable Postgres DSN and valid BigQuery creds (`BIGQUERY__KEYFILE`).
+- **Source must be live**: the job reads Neon; the simulator's continuous mode is a prerequisite for new rows.
 
 ---
 

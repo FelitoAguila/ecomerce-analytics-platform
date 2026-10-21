@@ -4,7 +4,7 @@
 
 deployments:
   - name: elt-daily
-    entrypoint: orchestration/prefect/flows.py:elt_flow
+    entrypoint: packages/orchestration/src/orchestration/flows.py:elt_flow
     work_pool:
       name: elt-pool
     concurrency_limit: 1

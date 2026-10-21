@@ -1,0 +1,45 @@
+name: ecommerce_db
+
+services:
+  seed:
+    build:
+      context: ../..
+      dockerfile: packages/ecommerce_db/Dockerfile
+    container_name: ecommerce_seed
+    restart: "no"
+    command: ["uv", "run", "--no-sync", "--package", "olist-ecommerce-database", "seed", "--verify"]
+    environment:
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN}
+      OBJECT_STORAGE__AWS_ENDPOINT_URL_S3: ${OBJECT_STORAGE__AWS_ENDPOINT_URL_S3}
+      OBJECT_STORAGE__AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE__AWS_ACCESS_KEY_ID}
+      OBJECT_STORAGE__AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE__AWS_SECRET_ACCESS_KEY}
+      OBJECT_STORAGE__AWS_REGION: ${OBJECT_STORAGE__AWS_REGION}
+      OBJECT_STORAGE__BUCKET: ${OBJECT_STORAGE__BUCKET:-olist-dataset}
+      PYTHONUNBUFFERED: "1"
+
+  simulate:
+    build:
+      context: ../..
+      dockerfile: packages/ecommerce_db/Dockerfile
+    container_name: ecommerce_simulator
+    restart: "no"
+    command:
+      - uv
+      - run
+      - --no-sync
+      - --package
+      - olist-ecommerce-database
+      - simulate
+      - --continuous
+      - --orders
+      - "100"
+      - --interval
+      - "20"
+    environment:
+      POSTGRES_DB__DSN: ${POSTGRES_DB__DSN}
+      OBJECT_STORAGE__AWS_ENDPOINT_URL_S3: ${OBJECT_STORAGE__AWS_ENDPOINT_URL_S3}
+      OBJECT_STORAGE__AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE__AWS_ACCESS_KEY_ID}
+      OBJECT_STORAGE__AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE__AWS_SECRET_ACCESS_KEY}
+      OBJECT_STORAGE__AWS_REGION: ${OBJECT_STORAGE__AWS_REGION}
+      OBJECT_STORAGE__BUCKET: ${OBJECT_STORAGE__BUCKET:-olist-dataset}
+      PYTHONUNBUFFERED: "1"

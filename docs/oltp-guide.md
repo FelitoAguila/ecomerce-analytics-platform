@@ -4,7 +4,7 @@ Everything about the Postgres OLTP layer: schema design, seeding, and live simul
 
 ---
 
-## 1. Schema (`ecommerce_db/src/ecommerce_db/helpers/schema.sql`)
+## 1. Schema (`packages/ecommerce_db/src/ecommerce_db/helpers/schema.sql`)
 
 ### Table names
 
@@ -78,7 +78,7 @@ Why on all 9 tables and not just the ones the simulator mutates? Uniformity. Eve
 
 ---
 
-## 2. Seeding (`ecommerce_db/src/ecommerce_db/seed.py`)
+## 2. Seeding (`packages/ecommerce_db/src/ecommerce_db/seed.py`)
 
 ### How it works
 
@@ -111,7 +111,7 @@ psycopg3 (the `psycopg` package) is **not** psycopg2. The COPY method is `cursor
 
 ---
 
-## 3. Simulator (`ecommerce_db/src/ecommerce_db/simulator.py`)
+## 3. Simulator (`packages/ecommerce_db/src/ecommerce_db/simulator.py`)
 
 ### What it does
 
@@ -143,18 +143,22 @@ The simulator also advances 5 existing orders from `shipped` to `delivered` per 
 
 ### Usage
 
+All commands run from the repo root. `seed`/`simulate` are uv entry points;
+Docker runs the same commands against Neon (`packages/ecommerce_db/README.md`).
+
 ```bash
-cd ecommerce_db && docker compose up -d     # starts Postgres; seed loads once, simulator runs one batch
-make db-shell                               # open psql to explore
-make simulator                              # run simulator once manually (Docker)
-uv run simulate                             # run locally from the repo root (50 orders)
-uv run simulate --orders 100
-uv run simulate --continuous --interval 15  # consecutive batches locally
+uv run --package olist-ecommerce-database seed --verify   # seed (drop+copy) + verify
+uv run --package olist-ecommerce-database simulate                 # one batch (50 orders)
+uv run --package olist-ecommerce-database simulate --orders 100
+uv run --package olist-ecommerce-database simulate --continuous --interval 20
+
+make seed        # Dockerized seed (one-shot, verified)
+make simulate    # Dockerized continuous simulator (detached)
 ```
 
 ### Continuous mode
 
-`--continuous` loops forever, generating batches at `--interval` seconds (default 30), keeping the OLTP live like a real production backend. The Docker `simulator` service runs a **single batch and exits** (compose mounts the dataset only for seed; the simulator connects to Postgres over the compose network). Use `--continuous` locally when you want the database to keep generating data.
+`--continuous` loops forever, generating batches at `--interval` seconds (default 30), keeping the OLTP live like a real production backend. The Docker `simulate` service runs it continuous by default (`--orders 100 --interval 20`). Use `--continuous` locally when you want the database to keep generating data.
 
 ### Summary output
 

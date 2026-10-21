@@ -1,23 +1,25 @@
 # dlt Pipeline
 
-ELT pipeline: extract from Postgres OLTP → load into DuckDB (bronze layer).
+ELT pipeline: extract from Postgres OLTP → load into BigQuery (bronze layer).
 
 ---
 
 ## 1. What it does
 
-Loads all 9 Olist tables from the Postgres OLTP database into a local DuckDB warehouse. First run loads everything; subsequent runs only fetch rows that changed since the last load (incremental).
+Loads all 9 Olist tables from the Postgres OLTP database (Neon) into the
+`bronze_data` dataset in BigQuery. First run loads everything; subsequent runs
+only fetch rows that changed since the last load (incremental).
 
 ```
-Postgres (OLTP)
+Postgres (Neon OLTP)
    │
    │  SELECT * FROM <table> WHERE updated_at > <last watermark>
    v
 dlt extract → normalize → load
    │
    v
-DuckDB (data/warehouse/ecommerce.duckdb)
-   └── ecommerce_data schema (customers, orders, order_items, ...)
+BigQuery
+   └── bronze_data dataset (customers, orders, order_items, ...)
 ```
 
 ## 2. How incremental loading works
@@ -28,15 +30,16 @@ Every table in Postgres has an `updated_at` column maintained by a trigger:
 
 dlt uses this column as a **cursor** (watermark). On each run:
 
-1. dlt reads the last watermark from its pipeline state (stored in the `_dlt_pipeline_state` table of the DuckDB file).
+1. dlt reads the last watermark from its pipeline state (stored in BigQuery in
+   the `_dlt_pipeline_state` table of the dataset).
 2. Extracts only rows where `updated_at > <previous max>`.
-3. Loads the new rows into DuckDB (append-only).
+3. Loads the new rows into BigQuery (append-only).
 4. Updates the watermark for the next run.
 
 This means:
 - **First run:** loads all rows (no previous watermark).
 - **Second run onward:** only new/changed rows. Fast.
-- **Status transitions** (e.g., shipped → delivered) appear as separate rows in bronze: the simulator fires an `UPDATE`, the `updated_at` trigger stamps a fresh timestamp, and dlt appends a new version of the row under the new watermark. This is correct for a bronze layer — it preserves historical truth. The silver layer (dbt, Phase 4) deduplicates (keeps the latest `updated_at` per natural key).
+- **Status transitions** (e.g., shipped → delivered) appear as separate rows in bronze: the simulator fires an `UPDATE`, the `updated_at` trigger stamps a fresh timestamp, and dlt appends a new version of the row under the new watermark. This is correct for a bronze layer — it preserves historical truth. The silver layer (dbt) deduplicates (keeps the latest `updated_at` per natural key).
 
 ### Why append-only?
 
@@ -46,36 +49,45 @@ A bronze layer should be a faithful copy of the source. If an order goes from `s
 
 | File | Purpose |
 |---|---|
-| `pipeline/src/pipeline/ingestion.py` | The dlt pipeline (entry point: `ingest`) |
-| `pipeline/src/pipeline/config.py` | Settings via pydantic-settings (Postgres DSN, warehouse path, dataset name) — reads the root `.env` |
-| `pyproject.toml` | Registers the `ingest` script + dlt/deps |
-| `data/warehouse/ecommerce.duckdb` | DuckDB warehouse file (gitignored, ~100MB; parent dir auto-created on first run) |
+| `packages/pipeline/src/pipeline/ingestion.py` | The dlt pipeline (entry point: `ingest`) |
+| `packages/pipeline/src/pipeline/config.py` | Settings via pydantic-settings (Postgres DSN, BigQuery project/location/keyfile, dataset name) — reads the root `.env` |
+| `packages/pipeline/pyproject.toml` | Registers the `ingest` script + `dlt[bigquery,sql-database]` deps |
 
 ## 4. Credentials
 
-No secrets are committed. Configuration lives in the root `.env` (gitignored) and is read by pydantic-settings:
+No secrets are committed. Configuration lives in the root `.env` (gitignored)
+and is read by pydantic-settings:
 
 ```
 .env (gitignored)
-   │  pydantic-settings (env_file=".env", nested `__` keys)
+   │  pydantic-settings (env_file=<workspace>/.env, nested `__` keys)
    v
-Settings (pipeline/config.py)
+Settings (packages/pipeline/src/pipeline/config.py)
    │
-   ├── postgres_db.dsn         ← POSTGRES_DB__DSN
-   ├── warehouse_local.path    ← WAREHOUSE_LOCAL__PATH
-   └── pipeline.name / dataset ← PIPELINE__NAME / PIPELINE__DATASET_NAME (optional)
+   ├── postgres_db.dsn          ← POSTGRES_DB__DSN
+   ├── bigquery.project         ← BIGQUERY__PROJECT
+   ├── bigquery.location        ← BIGQUERY__LOCATION (default US)
+   ├── bigquery.keyfile         ← BIGQUERY__KEYFILE (path to SA JSON)
+   └── pipeline.name / dataset  ← PIPELINE__NAME / PIPELINE__DATASET_NAME (optional)
 ```
 
-There is **no `.dlt/` directory**: the DuckDB destination path is not a secret, and dlt keeps its state inside the warehouse file itself. Run `uv run ingest` from the repo root so `env_file=".env"` resolves (`*.env` paths are relative to the current directory).
+BigQuery auth is a **service-account key file**: dlt loads it via
+`google.oauth2.service_account.Credentials.from_service_account_file(...)` and
+passes the credentials to `dlt.destinations.bigquery(...)`. The key JSON is
+gitignored (`*-sa.json`).
+
+There is **no `.dlt/` directory**: dlt keeps its state inside BigQuery (the
+`_dlt_pipeline_state` table), so container runs stay incremental automatically
+with no local volume.
 
 ## 5. Usage
 
 ```bash
-make ingest      # from the project root (runs `uv run ingest`)
-uv run ingest    # same thing, explicit
+make ingest                                            # from the repo root
+uv run --package olist-pipeline ingest                 # same thing, explicit
 ```
 
-First run takes several minutes (~1.3M rows, especially geolocation). Subsequent runs are fast (only new/changed rows). The warehouse parent directory (`data/warehouse/`) is created automatically on the first run.
+First run takes several minutes (~1.3M rows, especially geolocation). Subsequent runs are fast (only new/changed rows).
 
 ## 6. Key design decisions
 
@@ -85,8 +97,8 @@ First run takes several minutes (~1.3M rows, especially geolocation). Subsequent
 | `updated_at` cursor | Change tracking without modifying the source. The Postgres triggers guarantee this column is always current. |
 | Append-only bronze | Historical truth. Status transitions preserved as separate rows. Deduplication is silver's job. |
 | `ALL_TABLES` list | Single source of truth. Adding a table means editing one list, not two. |
-| Settings via pydantic-settings | The config model reads the root `.env` (`env_file=".env"`); nested `__` keys map to sub-models (`POSTGRES_DB__DSN`, `WAREHOUSE_LOCAL__PATH`). Run from the repo root so the relative `env_file` resolves. |
-| DSN string → SQLAlchemy URL | Keep credentials as a connection string; `.set(drivername="postgresql+psycopg")` produces a standard SQLAlchemy URL for the source. |
+| Service-account keyfile | Explicit, portable auth for local + Docker; the key path lives in `.env`, the key file itself is gitignored. |
+| BigQuery state, no volume | dlt's watermark lives in BigQuery, so the ELT container needs no persistent disk. |
 
 ## 7. dlt warnings
 
@@ -100,12 +112,11 @@ This is expected. The Olist dataset has many rows with the same timestamp (e.g.,
 
 ## 8. Status & what's next
 
-- **Incremental verified** (Phase 3): the watermark works for inserts and updates. To re-check: run `uv run ingest` twice and confirm bronze counts stabilize.
-- **dbt (Phase 4) done:** dbt reads `ecommerce_data.*` from DuckDB, builds silver + gold models with tests.
+- **Incremental verified** (Phase 3): the watermark works for inserts and updates.
+- **dbt (Phase 4) done:** dbt reads `bronze_data.*` from BigQuery, builds silver + gold models with tests.
 - **Orchestration (Phase 5) done:** Prefect schedules `ingest → dbt build` (see `docs/orchestration.md`).
 - **Airbyte comparison (deferred):** build the same load with the Airbyte Python API, compare ergonomics, speed, features.
-- **BigQuery (Phase 7):** swap the DuckDB destination for BigQuery; creds move into Secret Manager.
 
 ---
 
-*Last updated: Phase 3 (dlt) — refreshed for the `pipeline/` layout (2026-09)*
+*Last updated: BigQuery migration — dlt loads straight into `bronze_data` in BigQuery (2026-10)*
