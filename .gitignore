@@ -14,12 +14,15 @@ wheels/
 *.env.local
 
 # Data
-ecommerce_db/olist-dataset/*.csv
-data/warehouse/*.duckdb
-data/warehouse/*.wal
+packages/ecommerce_db/olist-dataset/*.csv
+
+# GCP service account keys
+service-account*.json
+gcp-sa*.json
+*-sa.json
 
 # Notebooks
 notebooks
 
-# Ignored files
+# Other files
 ignore/

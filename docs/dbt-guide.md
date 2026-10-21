@@ -6,22 +6,23 @@ Transformations: bronze (dlt-loaded) → silver (staging) → intermediate → g
 
 ## 1. What it does
 
-dbt reads the raw `ecommerce_data` schema in DuckDB (loaded by dlt) and builds a layered analytics model:
+dbt reads the raw `bronze_data` dataset in BigQuery (loaded by dlt) and builds a
+layered analytics model:
 
 ```
-DuckDB (data/warehouse/ecommerce.duckdb)
+BigQuery (<project>)
 │
-├── ecommerce_data   bronze — dlt raw tables (customers, orders, ...)
+├── bronze_data   bronze — dlt raw tables (customers, orders, ...)
 │
 │   dbt sources (read-only)
 │
-├── main_stg         silver — staging views, cleaned + deduplicated (9 models)
-├── main_int         intermediate — enriched/aggregated views (4 models)
-├── main_mart        gold — star schema tables (dim_* + fct_*)  (5 models)
-└── main_snapshots   SCD Type 2 history of orders (1 snapshot)
+├── stg           silver — staging views, cleaned + deduplicated (9 models)
+├── int           intermediate — enriched/aggregated views (4 models)
+├── mart          gold — star schema tables (dim_* + fct_*)  (5 models)
+└── snapshots     SCD Type 2 history of orders (1 snapshot)
 ```
 
-Running `uv run dbt run` (from `pipeline/dbt/`) builds all models in dependency order. Running `dbt build` runs models **and** their data tests, plus the snapshot.
+Running `uv run dbt run` (from `packages/pipeline/dbt/`) builds all models in dependency order. Running `dbt build` runs models **and** their data tests, plus the snapshot.
 
 ## 2. Layers
 
@@ -69,7 +70,7 @@ The star schema. `dim_*` are the things you slice by (who/what), `fct_*` are the
 
 **Why `coalesce` in `fct_orders`:** a `LEFT JOIN` to the order-totals model means orders with no items get NULL totals. Coalescing to `0` makes the fact table clean.
 
-## 3. Schema-per-layer (`main_*`)
+## 3. Schema-per-layer (datasets)
 
 Configured in `dbt_project.yml` via `+schema`:
 
@@ -77,24 +78,25 @@ Configured in `dbt_project.yml` via `+schema`:
 staging:      { +materialized: view,  +schema: stg }
 intermediate: { +materialized: view,  +schema: int }
 marts:        { +materialized: table, +schema: mart }
-snapshots:    target_schema: main_snapshots
+snapshots:    target_schema: snapshots
 ```
 
-The resulting schemas are `main_stg`, `main_int`, `main_mart`, `main_snapshots`.
+On BigQuery, `+schema` maps **directly** to a **dataset**: `stg`, `int`, `mart`,
+`snapshots`. (On the earlier DuckDB warehouse the adapter *appended* `+schema` to
+the profile's default schema, producing a `main_` prefix — that quirk is gone
+now.)
 
-**The `main_` prefix is a DuckDB adapter quirk:** dbt *appends* `+schema` to the profile's default schema (`main`) rather than replacing it. So `+schema: stg` yields `main_stg`, not `stg`. This is DuckDB-specific behavior — on BigQuery (Phase 7), `+schema` maps to a dataset name directly. Knowing this now avoids confusion later.
-
-Clean separation: raw (`ecommerce_data`) is kept untouched; `main` itself is left empty of dbt objects.
+Clean separation: raw (`bronze_data`) is kept untouched; dbt never writes there.
 
 ## 4. Materialization & rebuild semantics
 
 dbt is **declarative**: the model SQL describes the desired end state, and `dbt run` makes reality match it on every run.
 
-- **Views** are recreated each run (drop + recreate). Cheap.
-- **Tables** are fully rebuilt each run (drop + recreate from current SQL). At ~100k orders this takes seconds.
-- dbt does **not** incrementally merge by default. The `materialized='incremental'` strategy is available, but the DuckDB adapter implements it as a full table swap (no native `MERGE`), and full rebuilds are fast at this scale — so we skip incremental here. It becomes valuable on BigQuery (Phase 7).
+- **Views** are recreated each run (create or replace). Cheap.
+- **Tables** are fully rebuilt each run (create or replace from current SQL). At ~100k orders this takes seconds.
+- dbt does **not** incrementally merge by default. The `materialized='incremental'` strategy is available on BigQuery (native `MERGE`), and becomes valuable at larger scale — but at this size full rebuilds keep the models simple and the tests fully deterministic.
 
-**Orphan cleanup gotcha:** if you move/rename a model or change its schema, `dbt run` creates the new object but does **not** drop the old one. You clean up old objects yourself. (This happened in Step 8 when moving views from `main` to `main_stg` — the 13 orphan views in `main` were dropped manually.)
+**Orphan cleanup gotcha:** if you move/rename a model or change its dataset, `dbt run` creates the new object but does **not** drop the old one. You clean up old objects yourself.
 
 ## 5. Snapshots (SCD Type 2)
 
@@ -104,7 +106,7 @@ dbt is **declarative**: the model SQL describes the desired end state, and `dbt 
 {% snapshot orders_snapshot %}
 {{
     config(
-        target_schema='main_snapshots',
+        target_schema='snapshots',
         unique_key='order_id',
         strategy='timestamp',
         updated_at='updated_at',
@@ -135,27 +137,27 @@ Test placement matches dbt convention: a `_<layer>__models.yml` co-located in ea
 
 ## 7. Usage
 
-The dbt project lives at `pipeline/dbt/` (it must be run from there — dbt 1.9+ has no `--project-dir`). The Makefile wraps all of this for you, so from the project root you can use `make dbt-*` directly:
+The dbt project lives at `packages/pipeline/dbt/` (it must be run from there — dbt 1.9+ has no `--project-dir`). The Makefile wraps all of this for you, so from the project root you can use `make dbt-*` directly:
 
 ```bash
-cd pipeline/dbt
-uv run --group dbt-duckdb --env-file ../../.env dbt debug    # verify connection & config
-uv run --group dbt-duckdb --env-file ../../.env dbt run      # build all models (views + tables)
-uv run --group dbt-duckdb --env-file ../../.env dbt test     # run all data tests
-uv run --group dbt-duckdb --env-file ../../.env dbt build    # run + snapshot + test, in dependency order
-uv run --group dbt-duckdb --env-file ../../.env dbt snapshot # run snapshots only
-uv run --group dbt-duckdb --env-file ../../.env dbt docs ... # lineage docs
+cd packages/pipeline/dbt
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt debug    # verify connection & config
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt run      # build all models (views + tables)
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt test     # run all data tests
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt build    # run + snapshot + test, in dependency order
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt snapshot # run snapshots only
+uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env dbt docs ... # lineage docs
 ```
 
-From the project root, `make dbt-build` runs the full gate (models + snapshot + tests) with the same flags. The `--env-file ../../.env` makes the `WAREHOUSE_LOCAL__PATH` (and future cloud creds) available to `profiles.yml`; `--group dbt-duckdb` guarantees the adapter is installed.
+From the project root, `make dbt-build` runs the full gate (models + snapshot + tests) with the same flags. The `--env-file ../../../.env` makes `BIGQUERY__PROJECT`/`BIGQUERY__LOCATION`/`BIGQUERY__KEYFILE` available to `profiles.yml`; `--group dbt-bigquery` guarantees the adapter is installed.
 
 ## 8. Key design decisions
 
 | Decision | Why |
 |---|---|
-| DuckDB file is the database | Zero-ops single-node warehouse to iterate fast; swap the profile for BigQuery at Phase 7 |
+| BigQuery is the warehouse | Cloud DW from day one; the DuckDB iteration warehouse has been removed |
 | Staging = views, marts = tables | Staging is recomputed every run (cheap, always fresh); marts are stored for fast BI reads |
-| Schema per layer (`main_stg`, etc.) | Layered architecture is visible at the database level; keeps `ecommerce_data` raw untouched |
+| Dataset per layer (`stg`, `int`, `mart`, `snapshots`) | Layered architecture is visible at the warehouse level; keeps `bronze_data` raw untouched |
 | 3-CTE staging pattern | Uniform, readable, testable — same shape in every staging model |
 | Dedup in staging with `row_number()` | Bronze appends history; silver picks the latest version per natural key |
 | Enrichment split into focused intermediates | One job per model, composable in gold, easy to test and reuse |
@@ -165,10 +167,10 @@ From the project root, `make dbt-build` runs the full gate (models + snapshot + 
 
 ## 9. What's next
 
-- **Prefect orchestration (Phase 5):** schedule dlt + dbt (`dbt build`) + later the report; respect DuckDB's single-writer rule (don't run dlt and dbt concurrently).
+- **Prefect orchestration (Phase 5):** schedule dlt + dbt (`dbt build`) + later the report.
 - **Airbyte (Phase 3 deferred):** build the ingestion comparison pipeline.
-- **BigQuery (Phase 7):** swap the profile; incremental materialization becomes valuable at scale.
+- **Cloud (Phase 7):** Secret Manager for the SA key, Workload Identity on Cloud Run.
 
 ---
 
-*Last updated: Phase 4 (dbt) — refreshed for the `pipeline/dbt/` layout (2026-09)*
+*Last updated: BigQuery migration — dbt targets BigQuery datasets `stg`/`int`/`mart`/`snapshots` (2026-10)*
