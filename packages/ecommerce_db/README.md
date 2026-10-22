@@ -8,6 +8,14 @@ This README covers the **one-time operational setup** (Neon account, object
 storage bucket, dataset upload, credentials). For the schema design, seeding
 internals, and simulator behavior, see [`docs/oltp-guide.md`](../../docs/oltp-guide.md).
 
+**Contents:** [1. Prerequisites](#1-prerequisites) ·
+[2. Get the dataset](#2-get-the-dataset) ·
+[3. Create the bucket and upload](#3-create-the-bucket-and-upload-the-dataset) ·
+[4. Configure credentials](#4-configure-credentials) ·
+[5. Seed and verify](#5-seed-and-verify) ·
+[6. Simulate live data](#6-simulate-live-data-optional) ·
+[Running in Docker](#running-in-docker)
+
 ---
 
 ## 1. Prerequisites
@@ -169,3 +177,11 @@ docker compose -f packages/ecommerce_db/docker-compose.yaml --env-file .env run 
 > `localhost` inside a container refers to the container itself, so the DSN must
 > be the external Neon host. Rebuild the image after code changes — it bakes the
 > code in.
+
+---
+
+### See also
+
+- [Root README](../../README.md) — the end-to-end quickstart and Makefile targets.
+- [`docs/oltp-guide.md`](../../docs/oltp-guide.md) — schema decisions, seeding internals, simulator distributions.
+- [`.env.example`](../../.env.example) — every key this service reads (`POSTGRES_DB__*`, `OBJECT_STORAGE__*`).

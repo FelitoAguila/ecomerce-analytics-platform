@@ -33,7 +33,7 @@ pydantic-settings (env/`.env`):
 
 ```
 BIGQUERY__PROJECT=<project>
-BIGQUERY__LOCATION=US
+BIGQUERY__LOCATION=us-central1
 BIGQUERY__KEYFILE=/path/to/service-account.json
 
 DASHBOARD__FCT_ORDERS=mart.fct_orders
@@ -71,4 +71,4 @@ intermediate views exist), and `BIGQUERY__*` are set in `.env`.
 
 ---
 
-*Phase 6 (serving) — first gate: dashboard. Reports/digest is the second gate.*
+*Last updated: config-driven gold tables + `run_query` connection path (2026-10)*

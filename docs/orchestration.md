@@ -79,7 +79,7 @@ Deployment is registered with the server, bound to a work pool. Worker polls the
 | `packages/orchestration/src/orchestration/flows.py` | Flow + task (`run_elt`, `elt_flow`); shells out to `uv run elt` |
 | `packages/orchestration/Dockerfile` | Worker image: Python 3.12 + uv, env at `/opt/venv` |
 | `packages/orchestration/docker-compose.yaml` | Server + worker containers |
-| `Makefile` | `prefect-*` targets (host mode) and `orc-*` targets (container mode); deployment config lives in the `prefect-deploy`/`orc-deploy` targets (no `prefect.yaml` needed) |
+| `Makefile` | `prefect-*` targets (host mode) and `orc-*` targets (container mode); the deployment (`elt-daily`, cron `0 7 * * *`, `elt-pool`, `concurrency_limit=1`) is defined inline by `prefect-deploy`/`orc-deploy`. There is intentionally no `prefect.yaml`: one source of truth avoids drift between the file and the CLI flags |
 
 ## 5. Concurrency limit
 
@@ -164,4 +164,4 @@ For a standalone ELT runner image (no Prefect — baked code, one-shot `make elt
 
 ---
 
-*Last updated: BigQuery migration — dbt-bigquery, Neon/BigQuery creds via `.env` (2026-10)*
+*Last updated: BigQuery migration + reconciliation-aware ELT (2026-10)*

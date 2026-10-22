@@ -4,6 +4,10 @@ sources:
   - name: ecommerce_data
     schema: bronze_data
     loader: dlt
+    description: >
+      Primary bronze dataset. The incremental dlt run appends rows with
+      `updated_at` greater than the stored watermark, so historical versions of
+      a key accumulate here.
 
     config:
       freshness:

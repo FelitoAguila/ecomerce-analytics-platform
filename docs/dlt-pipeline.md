@@ -183,7 +183,7 @@ Settings (packages/pipeline/src/pipeline/config.py)
    │
    ├── postgres_db.dsn          ← POSTGRES_DB__DSN
    ├── bigquery.project         ← BIGQUERY__PROJECT
-   ├── bigquery.location        ← BIGQUERY__LOCATION (default US)
+   ├── bigquery.location        ← BIGQUERY__LOCATION (default us-central1)
    ├── bigquery.keyfile         ← BIGQUERY__KEYFILE (path to SA JSON)
    └── pipeline.name / dataset  ← PIPELINE__NAME / PIPELINE__DATASET_NAME (optional)
    └── pipeline.reconcile_*     ← PIPELINE__RECONCILE_NAME / PIPELINE__RECONCILE_DATASET_NAME (optional)
@@ -194,9 +194,32 @@ BigQuery auth is a **service-account key file**: `ingestion.py` builds
 and passes the credentials to `dlt.destinations.bigquery(...)`. The key JSON is
 gitignored (`*-sa.json`).
 
-There is **no `.dlt/` directory**: dlt keeps its state inside BigQuery (the
-`_dlt_pipeline_state` table), so container runs stay incremental automatically
-with no local volume.
+### State: local cache + BigQuery
+
+dlt keeps state in two places:
+
+- **Local cache** — `~/.dlt/pipelines/<pipeline_name>/`, including
+  `state.json` and `load/loaded`. Every pipeline (`ecommerce_pipeline` and
+  `ecommerce_pipeline_reconcile`) gets its own directory; with the full Olist
+  table set these reach tens of MB because dlt tracks the load hashes of every
+  file it has seen.
+- **BigQuery** — the `_dlt_pipeline_state` table in each dataset is the durable
+  copy. A container with an empty `~/.dlt` syncs its state down from BigQuery on
+  startup, so incremental runs still resume from the correct watermark without
+  a mounted volume.
+
+Two practical consequences:
+
+1. If the **local** cache is stale or missing, dlt may re-read a wider range
+   (at worst re-loading rows already in bronze, which the staging models
+   dedupe). If you need to reset the local cursor, delete the pipeline cache
+   directory and let dlt sync from `_dlt_pipeline_state` — do not delete the
+   BigQuery state table unless you intend a full reload.
+2. `load/loaded` grows over time. It is safe to prune (it only tracks
+   already-loaded file hashes); pruning makes dlt re-read rows, not lose data.
+
+There is **no repo-local `.dlt/` directory** — the cache lives in the user home,
+and the authoritative state is in BigQuery.
 
 ## 6. Usage
 

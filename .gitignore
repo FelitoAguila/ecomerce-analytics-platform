@@ -14,9 +14,6 @@ wheels/
 *.env
 *.env.local
 
-# Data
-packages/ecommerce_db/olist-dataset/*.csv
-
 # GCP service account keys
 service-account*.json
 gcp-sa*.json
@@ -24,6 +21,3 @@ gcp-sa*.json
 
 # Notebooks
 notebooks
-
-# Other files
-ignore/

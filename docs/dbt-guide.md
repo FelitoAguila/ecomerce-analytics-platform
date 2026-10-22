@@ -41,7 +41,7 @@ staging models work either way — see section 2.
 
 One model per source table, `stg_olist__<table>`. Job: **clean and deduplicate only** — no business logic, no joins across tables.
 
-- Standard 3-CTE pattern: `source → transform → select`.
+- Standard two-CTE pattern, then the final `select`: `source → deduplicated → select`.
 - The `source` CTE unions the two bronze datasets through the `olist_staging_source` macro (`macros/olist_sources.sql`):
 
   ```sql
@@ -57,13 +57,13 @@ One model per source table, `stg_olist__<table>`. Job: **clean and deduplicate o
   The existence check (`adapter.get_relation`) happens at compile time, so the
   project still builds before the first reconciliation run.
 
-- Deduplication via `row_number() over (partition by <natural key> order by updated_at desc)`; keep `rn = 1`. This runs over the union, so a row recovered by a reconciliation run wins over an older version of the same key.
+- Deduplication via `row_number() over (partition by <natural key> order by updated_at desc, _dlt_load_id desc)`; keep `rn = 1`. This runs over the union, so a row recovered by a reconciliation run wins over an older version of the same key. `_dlt_load_id` is the deterministic tie-breaker: the seeder writes every row with the same `updated_at` in a single transaction, so without it the "latest" version would depend on engine row order. Both bronze datasets come from dlt, so the column is always present.
 - Composite keys used where a single column isn't unique:
   - `order_items` → `(order_id, order_item_id)`
   - `order_payments` → `(order_id, payment_sequential)`
   - `reviews` → `(order_id, review_id)`
 - Renames kept in source, fixed here: `product_name_lenght` → `product_name_length`, `product_description_lenght` → `product_description_length`.
-- A synthetic `geolocation_id` key is added because the source `geolocation` table has none.
+- `geolocation_id` is the OLTP surrogate key (`BIGSERIAL`), carried through staging as-is. The 1M+ raw rows are collapsed later, in `int_geolocation_aggregated`, because the useful grain is city/state rather than a single point.
 
 **Why views:** staging is recomputed every run from upstream raw data. A view is just saved SQL, so it always reflects the latest raw state with zero storage cost. Recomputing a view is cheap.
 
@@ -87,7 +87,7 @@ The star schema. `dim_*` are the things you slice by (who/what), `fct_*` are the
 | Model | Notes |
 |---|---|
 | `dim_customers` | one row per **real** customer (`customer_unique_id`) — `customer_id` is per-order, so this collapses to unique customers |
-| `dim_products` | product with English category available via translation |
+| `dim_products` | product attributes, with the raw (Portuguese) `product_category_name`; the English translation is joined in `int_order_items_enriched` |
 | `dim_sellers` | seller attributes |
 | `fct_orders` | one row per order, composes `int_orders_enriched` + `int_order_items_aggregated`, `coalesce(..., 0)` so money/counts are never NULL |
 | `fct_order_payments` | one row per payment line |
@@ -168,9 +168,10 @@ rejects the query:
 | `datediff('hour', start, end)` | `timestamp_diff(end, start, HOUR)` | `DATE_DIFF` only supports date-level parts (`DAY, WEEK, ISOWEEK, MONTH, QUARTER, YEAR, ISOYEAR`). For sub-day parts use `TIMESTAMP_DIFF` (`MICROSECOND…HOUR, DAY`). |
 | `::` casts, `strftime`, `epoch` | `CAST(x AS y)`, `FORMAT_TIMESTAMP`, `UNIX_SECONDS` | Prefer the standard `CAST` form. |
 
-Two other BigQuery-isms used here that are *not* DuckDB-only, and work as-is:
-`count(*) filter (where ...)` (standard SQL `FILTER` clause) and
-`extract(year from ts)`.
+One more BigQuery-ism appears in the dashboard's hand-written SQL (not in the
+dbt models): `countif(condition)` instead of Postgres/DuckDB's
+`count(*) filter (where ...)`. BigQuery does **not** support the `FILTER`
+clause; `extract(year from ts)` works as-is.
 
 BigQuery truncates rather than rounds in `*_DIFF` functions, and counts
 *elapsed whole units* instead of DuckDB's *boundaries crossed* — a difference
@@ -206,9 +207,9 @@ Result columns the snapshot adds: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_fro
 
 Data tests guard the layers (73 in total). Built-in tests used: `unique`, `not_null`, `accepted_values`, `relationships`. Plus one custom generic test: `assert_non_negative` (`tests/generic/`), which fails any row where a column is negative — used on money/count columns.
 
-- `staging`: 29 tests — PK (`unique` + `not_null`), FK integrity (`relationships` to the staging models), value whitelists (`accepted_values`), and `not_null` on required columns. Review `accepted_values` uses a `where:` config to skip NULLs.
-- `intermediate`: uniqueness on composite keys, `not_null` on keys, `accepted_values` on `order_status`, and `assert_non_negative` on money/counts.
-- `marts`: PKs on `dim_*`, plus `fct_orders` FK → `dim_customers` and `fct_order_payments` FK → `fct_orders` (referential integrity in gold).
+- `staging`: 29 tests — `unique` + `not_null` on single-column keys, FK integrity (`relationships` to the staging models), value whitelists (`accepted_values`), and `not_null` on required columns. Review `accepted_values` uses a `where:` config to skip NULLs. Composite-key tables (`order_items`, `order_payments`, `reviews`) deliberately get no composite uniqueness test: that needs `dbt_utils.unique_combination_of_columns`, and this project keeps the dependency out (see the decisions table). Their keys are covered by `not_null` and FK tests.
+- `intermediate`: `unique` + `not_null` on single-column keys, `not_null` on joined keys, `accepted_values` on `order_status`, and `assert_non_negative` on money/counts.
+- `marts`: `unique` + `not_null` on each `dim_*` key, plus `fct_orders` FK → `dim_customers` and `fct_order_payments` FK → `fct_orders` (referential integrity in gold).
 - `snapshots`: `not_null` on `order_id`, `order_status`, `dbt_valid_from`.
 
 Test placement matches dbt convention: a `_<layer>__models.yml` co-located in each model folder.
@@ -262,7 +263,7 @@ From the project root, `make dbt-build` runs the full gate (models + snapshot + 
 | Dataset per layer (`stg`, `int`, `mart`, `snapshots`) | Layered architecture is visible at the warehouse level; keeps `bronze_data` raw untouched |
 | `generate_schema_name` macro override | Makes `+schema` map 1:1 to a BigQuery dataset instead of dbt's default `<target>_<custom>` concatenation; the names the dashboard reads (`mart.*`, `int.*`) depend on it |
 | BigQuery-native SQL (`date_diff` / `timestamp_diff`) | The warehouse rejects DuckDB's `datediff(part, start, end)`; BigQuery swaps the argument order and needs `timestamp_diff` for sub-day parts |
-| 3-CTE staging pattern | Uniform, readable, testable — same shape in every staging model |
+| Two-CTE staging pattern (`source → deduplicated` + final select) | Uniform, readable, testable — same shape in every staging model |
 | Dedup in staging with `row_number()` | Bronze appends history; silver picks the latest version per natural key |
 | Staging unions `bronze_data` + `bronze_reconcile` | Rows the incremental watermark skipped are recovered by the reconciliation run and reach silver exactly once |
 | `olist_staging_source` macro | One place that knows about the two bronze datasets; the reconcile branch is emitted only when its table exists, so the project builds before the first backfill |
@@ -273,9 +274,12 @@ From the project root, `make dbt-build` runs the full gate (models + snapshot + 
 
 ## 10. What's next
 
-- **Prefect orchestration (Phase 5):** schedule dlt + dbt (`dbt build`) + later the report.
+- **Daily digest report:** the dashboard's daily summary, materialized for sharing.
 - **Airbyte (Phase 3 deferred):** build the ingestion comparison pipeline.
 - **Cloud (Phase 7):** Secret Manager for the SA key, Workload Identity on Cloud Run.
+
+> Prefect orchestration (Phase 5) is implemented — see
+> [`orchestration.md`](orchestration.md) and the `prefect-*` Makefile targets.
 
 ---
 

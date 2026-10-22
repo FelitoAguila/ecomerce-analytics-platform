@@ -16,11 +16,11 @@ Source CSV filenames are used as table names (`customers`, `geolocation`, `produ
 |---|---|
 | All text → `TEXT` | In Postgres, `TEXT` and `VARCHAR(n)` perform identically (same internal storage). `TEXT` is simpler and idiomatic in Postgres. |
 | `CHAR(2)` for state codes | States are exactly 2 letters (SP, RJ, MG, …). A fixed-length type signals "this field always has the same length" and lets the DB enforce it. |
-| `VARCHAR(20)` for statuses/payment types | Short enumerated values with a predictable ceiling. The explicit length is documentation, not a hard limit (Postgres pads to the right, doesn't truncate). |
+| `VARCHAR(20)` for statuses/payment types | Short enumerated values with a predictable ceiling. The length is enforced by Postgres (an over-long value is an error), and it doubles as documentation of the expected width. |
 | `INTEGER` vs `SMALLINT` | `SMALLINT` for review_score (1–5, tiny range) — a minor space savings that also reads as "this is a small number." |
 | `DOUBLE PRECISION` for lat/lng | Float is fine for coordinates — precision error is negligible at city level. Money is the only place where rounding bites, and here we don't touch money. |
 | `NUMERIC(10,2)` for price/freight/payment | Exact decimal arithmetic. `FLOAT` would introduce rounding errors on money (e.g. 0.1 + 0.2 ≠ 0.3). `NUMERIC` is what banks use. |
-| `TIMESTAMP` (without timezone) | The Olist CSVs store Brazilian local times with no timezone info. `TIMESTAMP` preserves the literal values as-is. `TIMESTAMPTZ` would interpret them under the server's timezone and silently shift every value. We normalize to UTC in silver (Phase 4). |
+| `TIMESTAMP` (without timezone) | The Olist CSVs store Brazilian local times with no timezone info. `TIMESTAMP` preserves the literal values as-is. `TIMESTAMPTZ` would interpret them under the server's timezone and silently shift every value. The naive values flow through dlt into BigQuery `TIMESTAMP`, where they are treated as UTC — they stay comparable and consistent across layers, but they are not true UTC instants. |
 | `BIGSERIAL` for geolocation surrogate PK | Auto-increment integer. Needed because `geolocation` has duplicate zip codes (no natural key exists). |
 
 ### Nullable columns
@@ -82,11 +82,21 @@ Why on all 9 tables and not just the ones the simulator mutates? Uniformity. Eve
 
 ### How it works
 
-`seed.py` connects to Postgres, executes `schema.sql` (drop + recreate all tables), then uses the Postgres `COPY` protocol to bulk-load each CSV. The COPY protocol streams data at wire speed — much faster than per-row INSERT.
+`seed.py` connects to Postgres, executes `schema.sql` (drop + recreate all
+tables), then streams each CSV from **Neon Object Storage** (S3-compatible,
+via boto3) into the table with the Postgres `COPY` protocol. `COPY` runs at wire
+speed — much faster than per-row INSERT — and the CSV is never written to disk:
+`iter_csv_text` reads the S3 object in 8 KB chunks and feeds them straight to
+the COPY stream. Bucket layout and credentials are documented in
+[`packages/ecommerce_db/README.md`](../packages/ecommerce_db/README.md).
 
 ### BOM handling
 
-`product_category_name_translation.csv` starts with a UTF-8 BOM (byte order mark). Postgres COPY with `HEADER TRUE` reads the header line positionally, but a BOM prepended to the first column name causes a mismatch. Opening with `encoding='utf-8-sig'` tells Python to strip the BOM before COPY sees it.
+`product_category_name_translation.csv` starts with a UTF-8 BOM (byte order
+mark). Postgres COPY with `HEADER TRUE` reads the header line positionally, but
+a BOM prepended to the first column name causes a mismatch. `iter_csv_text`
+wraps the stream in an incremental `utf-8-sig` decoder: it strips the BOM from
+the first chunk and preserves multibyte characters that span chunk boundaries.
 
 ### Copy order
 
@@ -132,14 +142,17 @@ Simulates a live e-commerce backend producing new data on top of the seeded hist
 
 | Anomaly | Rate | What it produces |
 |---|---|---|
-| Backdated orders | 5% | Purchase timestamps from 2017–2018 instead of current date |
+| Backdated orders | 5% | Purchase timestamps from 2017 to early 2019 instead of the current date |
 | Missing review score | 2% | `review_score` is NULL instead of 1–5 |
 | Outlier prices | 1% | Item price between R$5,000 and R$6,735 |
 | Bad status transition | 1% | Existing order status goes backwards (e.g., shipped → created) |
 
 ### Status transitions
 
-The simulator also advances 5 existing orders from `shipped` to `delivered` per run. This generates UPDATE rows that fire the `updated_at` trigger — useful for testing the incremental watermark in Phase 3.
+The simulator also advances 5 existing orders from `shipped` per run — normally
+to `delivered`, while the 1% bad-status anomaly sends one to `created` instead.
+This generates UPDATE rows that fire the `updated_at` trigger — useful for
+testing the incremental watermark in Phase 3.
 
 ### Usage
 
@@ -166,4 +179,4 @@ After each run, the script prints counts of new orders, items, payments, reviews
 
 ---
 
-*Last updated: Phase 2 (simulator)*
+*Last updated: object-storage seeding + incremental/reconcile pipeline (2026-10)*

@@ -1,19 +1,18 @@
 import streamlit as st
 
-from dashboard.connection import get_connection
+from dashboard.connection import run_query
 from dashboard.settings import get_settings
 
 
 @st.cache_data(ttl=300, show_spinner="Querying warehouse...")
 def _cached(sql: str, params: tuple) -> object:
-    conn = get_connection()
     if params:
         param_dict = {
             name: (list(value) if isinstance(value, tuple) else value)
             for name, value in params
         }
-        return conn.execute(sql, param_dict).df()
-    return conn.execute(sql).df()
+        return run_query(sql, param_dict)
+    return run_query(sql)
 
 
 def run(sql: str, **params):
@@ -43,7 +42,7 @@ def kpis():
             round(sum(order_total_value), 2)        as revenue,
             round(sum(order_total_value) / count(*), 2) as avg_order_value,
             round(avg(delivery_days), 1)            as avg_delivery_days,
-            round(100.0 * count(*) filter (where order_status = 'delivered') / count(*), 1)
+            round(100.0 * countif(order_status = 'delivered') / count(*), 1)
                                                     as delivered_pct
         from {t["fct_orders"]}
         """

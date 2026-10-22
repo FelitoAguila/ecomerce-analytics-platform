@@ -12,7 +12,7 @@ deduplicated as (
         updated_at,
         row_number() over (
             partition by product_category_name
-            order by updated_at desc
+            order by updated_at desc, _dlt_load_id desc
         ) as rn
     from source
 

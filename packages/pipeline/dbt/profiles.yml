@@ -7,5 +7,5 @@ olist_ecommerce:
       project: "{{ env_var('BIGQUERY__PROJECT') }}"
       dataset: bronze_data
       keyfile: "{{ env_var('BIGQUERY__KEYFILE') }}"
-      location: "{{ env_var('BIGQUERY__LOCATION', 'US') }}"
+      location: "{{ env_var('BIGQUERY__LOCATION', 'us-central1') }}"
       threads: 4
