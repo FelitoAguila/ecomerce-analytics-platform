@@ -2,15 +2,9 @@ from functools import lru_cache
 
 import boto3
 from botocore.client import BaseClient
-from pydantic import AnyUrl, BaseModel, PostgresDsn, SecretStr
+from pydantic import AnyUrl, BaseModel, SecretStr
 
-from config.settings import ConfigBase
-
-
-class PostgresDB(BaseModel):
-    """Connection details for the OLTP Postgres database."""
-
-    dsn: PostgresDsn
+from config.settings import ConfigBase, PostgresDB
 
 
 class ObjectStorage(BaseModel):

@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB__DSN: ${POSTGRES_DB__DSN:?POSTGRES_DB__DSN is required}
       BIGQUERY__PROJECT: ${BIGQUERY__PROJECT:?BIGQUERY__PROJECT is required}
-      BIGQUERY__LOCATION: ${BIGQUERY__LOCATION:-US}
+      BIGQUERY__LOCATION: ${BIGQUERY__LOCATION:-us-central1}
       BIGQUERY__KEYFILE: /app/secrets/gcp-sa.json
     volumes:
       # Read-only .env so `uv run --env-file /app/.env dbt` works; the

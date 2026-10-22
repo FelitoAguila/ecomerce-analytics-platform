@@ -45,7 +45,7 @@ ingest:
 # bronze_reconcile dataset. Idempotent: merged by primary key, watermark untouched.
 ingest-backfill:
 	@test -n "$(SINCE)" || (echo "SINCE is required, e.g. make ingest-backfill SINCE=2026-10-01T00:00:00"; exit 1)
-	uv run --package olist-pipeline ingest --backfill --since $(SINCE) $(if $(UNTIL),--until $(UNTIL),)
+	uv run --package olist-pipeline ingest --backfill --since "$(SINCE)" $(if $(UNTIL),--until "$(UNTIL)",)
 
 # Full ELT: dlt ingest -> dbt build (bronze/silver/gold + tests).
 elt:

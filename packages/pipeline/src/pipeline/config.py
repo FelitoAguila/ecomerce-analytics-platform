@@ -1,14 +1,8 @@
 from functools import lru_cache
 
-from pydantic import BaseModel, PostgresDsn
+from pydantic import BaseModel
 
-from config.settings import BigQuery, ConfigBase
-
-
-class PostgresDB(BaseModel):
-    """Postgres Ecommerce OLTP Database"""
-
-    dsn: PostgresDsn
+from config.settings import BigQuery, ConfigBase, PostgresDB
 
 
 class PipelineSettings(BaseModel):

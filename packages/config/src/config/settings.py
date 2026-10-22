@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from config.paths import workspace_root
@@ -24,11 +24,17 @@ class ConfigBase(BaseSettings):
     )
 
 
+class PostgresDB(BaseModel):
+    """Connection details for the OLTP Postgres database."""
+
+    dsn: PostgresDsn
+
+
 class BigQuery(BaseModel):
     """BigQuery Data Warehouse"""
 
     project: str
-    location: str = "US"
+    location: str = "us-central1"
     keyfile: str
 
     @field_validator("keyfile")
