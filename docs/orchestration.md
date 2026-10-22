@@ -18,6 +18,17 @@ elt_flow
 
 Sequential by design: keeps ordering deterministic and resource use predictable.
 
+The reconciliation run is **not** part of the flow yet. It is a separate,
+self-contained job that recovers rows the incremental watermark skipped:
+
+```bash
+make ingest-backfill SINCE=2026-10-01T00:00:00
+```
+
+It writes to its own dataset (`bronze_reconcile`), never moves the incremental
+watermark, and can run on its own schedule without touching this flow — see
+[`docs/dlt-pipeline.md`](dlt-pipeline.md#3-reconciliation-periodic-backfill).
+
 ## 2. Architecture
 
 Prefect has two decoupled roles:

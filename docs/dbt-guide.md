@@ -12,7 +12,8 @@ layered analytics model:
 ```
 BigQuery (<project>)
 │
-├── bronze_data   bronze — dlt raw tables (customers, orders, ...)
+├── bronze_data         bronze — dlt raw tables (customers, orders, ...)
+├── bronze_reconcile    bronze — dlt reconciliation tables (latest version per key)
 │
 │   dbt sources (read-only)
 │
@@ -24,6 +25,16 @@ BigQuery (<project>)
 
 Running `uv run dbt run` (from `packages/pipeline/dbt/`) builds all models in dependency order. Running `dbt build` runs models **and** their data tests, plus the snapshot.
 
+Two bronze sources are declared in `models/sources.yml`:
+
+| Source | Dataset | Written by |
+|---|---|---|
+| `ecommerce_data` | `bronze_data` | the dlt incremental run (append-only history) |
+| `ecommerce_data_reconcile` | `bronze_reconcile` | the dlt reconciliation run (merged by primary key) |
+
+`bronze_reconcile` only exists after the first `make ingest-backfill`. The
+staging models work either way — see section 2.
+
 ## 2. Layers
 
 ### Staging (`models/staging/`, materialized as views)
@@ -31,7 +42,22 @@ Running `uv run dbt run` (from `packages/pipeline/dbt/`) builds all models in de
 One model per source table, `stg_olist__<table>`. Job: **clean and deduplicate only** — no business logic, no joins across tables.
 
 - Standard 3-CTE pattern: `source → transform → select`.
-- Deduplication via `row_number() over (partition by <natural key> order by updated_at desc)`; keep `rn = 1`.
+- The `source` CTE unions the two bronze datasets through the `olist_staging_source` macro (`macros/olist_sources.sql`):
+
+  ```sql
+  with source as (
+
+      {{ olist_staging_source('customers') }}
+
+  ),
+  ```
+
+  The macro emits `select * from bronze_data.customers` and, **only when the
+  reconcile table exists**, `union all select * from bronze_reconcile.customers`.
+  The existence check (`adapter.get_relation`) happens at compile time, so the
+  project still builds before the first reconciliation run.
+
+- Deduplication via `row_number() over (partition by <natural key> order by updated_at desc)`; keep `rn = 1`. This runs over the union, so a row recovered by a reconciliation run wins over an older version of the same key.
 - Composite keys used where a single column isn't unique:
   - `order_items` → `(order_id, order_item_id)`
   - `order_payments` → `(order_id, payment_sequential)`
@@ -82,9 +108,35 @@ snapshots:    target_schema: snapshots
 ```
 
 On BigQuery, `+schema` maps **directly** to a **dataset**: `stg`, `int`, `mart`,
-`snapshots`. (On the earlier DuckDB warehouse the adapter *appended* `+schema` to
-the profile's default schema, producing a `main_` prefix — that quirk is gone
-now.)
+`snapshots`. This works because `macros/generate_schema_name.sql` overrides dbt's
+default macro, which would otherwise *append* the custom schema to the profile's
+default schema (`bronze_data_stg`, `bronze_data_int`, `bronze_data_mart`).
+
+```sql
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if custom_schema_name is none -%}
+        {{ target.schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}
+```
+
+Final dataset layout in BigQuery:
+
+| Dataset | Written by | Contents |
+|---|---|---|
+| `bronze_data` | dlt | raw tables (the dbt source) |
+| `bronze_reconcile` | dlt | reconciled tables (latest version per key) |
+| `stg` | dbt | staging views |
+| `int` | dbt | intermediate views |
+| `mart` | dbt | gold tables (`fct_*`, `dim_*`) |
+| `snapshots` | dbt | SCD2 `orders_snapshot` |
+| `dbt_test__audit` | dbt | data test results |
+
+The names `mart.*` and `int.*` are what the dashboard reads (see
+`GoldTableRefs` in `packages/config/src/config/settings.py`), so this override is
+what keeps the serving layer and the warehouse in sync.
 
 Clean separation: raw (`bronze_data`) is kept untouched; dbt never writes there.
 
@@ -96,9 +148,35 @@ dbt is **declarative**: the model SQL describes the desired end state, and `dbt 
 - **Tables** are fully rebuilt each run (create or replace from current SQL). At ~100k orders this takes seconds.
 - dbt does **not** incrementally merge by default. The `materialized='incremental'` strategy is available on BigQuery (native `MERGE`), and becomes valuable at larger scale — but at this size full rebuilds keep the models simple and the tests fully deterministic.
 
-**Orphan cleanup gotcha:** if you move/rename a model or change its dataset, `dbt run` creates the new object but does **not** drop the old one. You clean up old objects yourself.
+**Orphan cleanup gotcha:** if you move/rename a model or change its dataset, `dbt run` creates the new object but does **not** drop the old one. You clean up old objects yourself. E.g. dropping the pre-override datasets:
 
-## 5. Snapshots (SCD Type 2)
+```sql
+DROP SCHEMA IF EXISTS `project.bronze_data_stg` OPTIONS (delete_contents=TRUE);
+DROP SCHEMA IF EXISTS `project.bronze_data_int` OPTIONS (delete_contents=TRUE);
+DROP SCHEMA IF EXISTS `project.bronze_data_mart` OPTIONS (delete_contents=TRUE);
+```
+
+## 5. BigQuery SQL dialect (DuckDB → BigQuery)
+
+The models were originally written for DuckDB. BigQuery's GoogleSQL differs in
+a few places that bite silently — dbt compiles fine and only the warehouse
+rejects the query:
+
+| DuckDB | BigQuery | Notes |
+|---|---|---|
+| `datediff('day', start, end)` | `date_diff(end, start, DAY)` | **Arguments swapped**, part is a bare keyword, not a string. |
+| `datediff('hour', start, end)` | `timestamp_diff(end, start, HOUR)` | `DATE_DIFF` only supports date-level parts (`DAY, WEEK, ISOWEEK, MONTH, QUARTER, YEAR, ISOYEAR`). For sub-day parts use `TIMESTAMP_DIFF` (`MICROSECOND…HOUR, DAY`). |
+| `::` casts, `strftime`, `epoch` | `CAST(x AS y)`, `FORMAT_TIMESTAMP`, `UNIX_SECONDS` | Prefer the standard `CAST` form. |
+
+Two other BigQuery-isms used here that are *not* DuckDB-only, and work as-is:
+`count(*) filter (where ...)` (standard SQL `FILTER` clause) and
+`extract(year from ts)`.
+
+BigQuery truncates rather than rounds in `*_DIFF` functions, and counts
+*elapsed whole units* instead of DuckDB's *boundaries crossed* — a difference
+of at most one unit on sub-day metrics.
+
+## 6. Snapshots (SCD Type 2)
 
 `snapshots/orders_snapshot.sql` tracks the full history of order status changes:
 
@@ -124,18 +202,42 @@ This works hand-in-hand with the append-only bronze: status transitions shipped 
 
 Result columns the snapshot adds: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from`, `dbt_valid_to`.
 
-## 6. Tests
+## 7. Tests
 
 Data tests guard the layers (73 in total). Built-in tests used: `unique`, `not_null`, `accepted_values`, `relationships`. Plus one custom generic test: `assert_non_negative` (`tests/generic/`), which fails any row where a column is negative — used on money/count columns.
 
-- `staging`: 29 tests — PK (`unique` + `not_null`), FK integrity (`relationships` to sources), value whitelists (`accepted_values`), and `not_null` on required columns. Review `accepted_values` uses a `where:` config to skip NULLs.
+- `staging`: 29 tests — PK (`unique` + `not_null`), FK integrity (`relationships` to the staging models), value whitelists (`accepted_values`), and `not_null` on required columns. Review `accepted_values` uses a `where:` config to skip NULLs.
 - `intermediate`: uniqueness on composite keys, `not_null` on keys, `accepted_values` on `order_status`, and `assert_non_negative` on money/counts.
 - `marts`: PKs on `dim_*`, plus `fct_orders` FK → `dim_customers` and `fct_order_payments` FK → `fct_orders` (referential integrity in gold).
 - `snapshots`: `not_null` on `order_id`, `order_status`, `dbt_valid_from`.
 
 Test placement matches dbt convention: a `_<layer>__models.yml` co-located in each model folder.
 
-## 7. Usage
+**FK tests point at the staging models, not at the raw source.** A staging row may come from the reconciliation dataset, and that row is not present in `bronze_data` — a `relationships` test against the raw source would fail on it. Testing against `ref('stg_olist__customers')` validates the cleaned set the model actually joins to.
+
+### dbt 1.12 YAML conventions
+
+Two syntax rules apply to every generic test in this project:
+
+```yaml
+      - name: review_score
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+              config:
+                where: "review_score is not null"
+```
+
+- Test **arguments** go under `arguments:`; test **configuration** (`where`, `severity`, `tags`, …) goes under `config:`. Top-level arguments still work in dbt 1.12 but emit deprecation warnings.
+- `accepted_values` quotes its values by default (`quote: true`), which renders `'1','2','3','4','5'`. Against an `INT64` column BigQuery rejects that with `No matching signature for operator IN for argument types INT64 and {STRING}` — so numeric columns need `quote: false`.
+
+### Test ordering
+
+`make dbt-test` depends on `make dbt-snapshot`, because the snapshot tests run against the `snapshots` dataset, which only exists once a snapshot has been run. `make dbt-build` runs models → snapshot → tests in the right order in one command.
+
+## 8. Usage
 
 The dbt project lives at `packages/pipeline/dbt/` (it must be run from there — dbt 1.9+ has no `--project-dir`). The Makefile wraps all of this for you, so from the project root you can use `make dbt-*` directly:
 
@@ -151,21 +253,25 @@ uv run --package olist-pipeline --group dbt-bigquery --env-file ../../../.env db
 
 From the project root, `make dbt-build` runs the full gate (models + snapshot + tests) with the same flags. The `--env-file ../../../.env` makes `BIGQUERY__PROJECT`/`BIGQUERY__LOCATION`/`BIGQUERY__KEYFILE` available to `profiles.yml`; `--group dbt-bigquery` guarantees the adapter is installed.
 
-## 8. Key design decisions
+## 9. Key design decisions
 
 | Decision | Why |
 |---|---|
 | BigQuery is the warehouse | Cloud DW from day one; the DuckDB iteration warehouse has been removed |
 | Staging = views, marts = tables | Staging is recomputed every run (cheap, always fresh); marts are stored for fast BI reads |
 | Dataset per layer (`stg`, `int`, `mart`, `snapshots`) | Layered architecture is visible at the warehouse level; keeps `bronze_data` raw untouched |
+| `generate_schema_name` macro override | Makes `+schema` map 1:1 to a BigQuery dataset instead of dbt's default `<target>_<custom>` concatenation; the names the dashboard reads (`mart.*`, `int.*`) depend on it |
+| BigQuery-native SQL (`date_diff` / `timestamp_diff`) | The warehouse rejects DuckDB's `datediff(part, start, end)`; BigQuery swaps the argument order and needs `timestamp_diff` for sub-day parts |
 | 3-CTE staging pattern | Uniform, readable, testable — same shape in every staging model |
 | Dedup in staging with `row_number()` | Bronze appends history; silver picks the latest version per natural key |
+| Staging unions `bronze_data` + `bronze_reconcile` | Rows the incremental watermark skipped are recovered by the reconciliation run and reach silver exactly once |
+| `olist_staging_source` macro | One place that knows about the two bronze datasets; the reconcile branch is emitted only when its table exists, so the project builds before the first backfill |
 | Enrichment split into focused intermediates | One job per model, composable in gold, easy to test and reuse |
 | `fct_orders` composes two intermediates via `ref()` | The DAG expresses real reuse instead of copy-pasted joins |
 | `dbt_utils` skipped | Keep dependencies minimal; only built-in tests + one tiny custom test |
 | Snapshots on orders | Demonstrates SCD Type 2 against the simulator's status changes |
 
-## 9. What's next
+## 10. What's next
 
 - **Prefect orchestration (Phase 5):** schedule dlt + dbt (`dbt build`) + later the report.
 - **Airbyte (Phase 3 deferred):** build the ingestion comparison pipeline.
@@ -173,4 +279,4 @@ From the project root, `make dbt-build` runs the full gate (models + snapshot + 
 
 ---
 
-*Last updated: BigQuery migration — dbt targets BigQuery datasets `stg`/`int`/`mart`/`snapshots` (2026-10)*
+*Last updated: staging unions both bronze datasets; dbt 1.12 `arguments:`/`config:` test syntax (2026-10)*

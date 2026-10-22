@@ -1,8 +1,11 @@
 with source as (
-    select * from {{ source('ecommerce_data', 'reviews') }}
+
+    {{ olist_staging_source('reviews') }}
+
 ),
 
 deduplicated as (
+
     select
         review_id,
         order_id,
@@ -17,6 +20,7 @@ deduplicated as (
             order by updated_at desc
         ) as rn
     from source
+
 )
 
 select

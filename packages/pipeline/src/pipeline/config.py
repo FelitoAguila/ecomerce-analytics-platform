@@ -16,6 +16,8 @@ class PipelineSettings(BaseModel):
 
     name: str = "ecommerce_pipeline"
     dataset_name: str = "bronze_data"
+    reconcile_name: str = "ecommerce_pipeline_reconcile"
+    reconcile_dataset_name: str = "bronze_reconcile"
 
 
 class Settings(ConfigBase):

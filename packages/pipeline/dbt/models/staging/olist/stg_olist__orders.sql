@@ -1,8 +1,11 @@
 with source as (
-    select * from {{ source('ecommerce_data', 'orders') }}
+
+    {{ olist_staging_source('orders') }}
+
 ),
 
 deduplicated as (
+
     select
         order_id,
         customer_id,
@@ -18,6 +21,7 @@ deduplicated as (
             order by updated_at desc
         ) as rn
     from source
+
 )
 
 select

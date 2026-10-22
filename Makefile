@@ -3,7 +3,7 @@
 #
 # Run all targets from the repo root.
 
-.PHONY: help docker-build seed simulate simulate-logs simulate-once seed-local ingest elt elt-build elt-docker dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard lint format
+.PHONY: help docker-build seed simulate simulate-logs simulate-once seed-local ingest ingest-backfill elt elt-build elt-docker dbt-debug dbt-parse dbt-run dbt-test dbt-build dbt-snapshot dbt-docs prefect-server prefect-flow prefect-serve prefect-pool prefect-deploy prefect-worker orc-up orc-down orc-logs orc-deploy orc-run dashboard lint format
 
 # --- Dockerized OLTP (Neon-backed; see packages/ecommerce_db/README.md) ---
 # --env-file .env lets Compose interpolate ${...} from the repo-root .env.
@@ -41,6 +41,12 @@ seed-local:
 ingest:
 	uv run --package olist-pipeline ingest
 
+# Periodic reconciler: re-read rows in [SINCE, UNTIL] into the separate
+# bronze_reconcile dataset. Idempotent: merged by primary key, watermark untouched.
+ingest-backfill:
+	@test -n "$(SINCE)" || (echo "SINCE is required, e.g. make ingest-backfill SINCE=2026-10-01T00:00:00"; exit 1)
+	uv run --package olist-pipeline ingest --backfill --since $(SINCE) $(if $(UNTIL),--until $(UNTIL),)
+
 # Full ELT: dlt ingest -> dbt build (bronze/silver/gold + tests).
 elt:
 	uv run --package olist-pipeline elt
@@ -66,7 +72,7 @@ dbt-parse:
 dbt-run:
 	$(DBT) run
 
-dbt-test:
+dbt-test: dbt-snapshot
 	$(DBT) test
 
 dbt-build:
