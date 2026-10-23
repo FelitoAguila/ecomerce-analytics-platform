@@ -150,17 +150,6 @@ olist-ecommerce/                # uv virtual workspace; members under packages/*
     └── dashboard.md       # Streamlit dashboard, config-driven tables
 ```
 
-## Phase status
-
-- [x] **0. Foundations** — repo layout, deps (uv), Makefile
-- [x] **1. OLTP + seed** — Postgres schema, triggers, object-storage COPY loader
-- [x] **2. Simulator** — fake backend generating live data + anomalies
-- [x] **3. ELT (dlt)** — incremental Neon → BigQuery `bronze_data` + reconciliation
-- [x] **4. dbt** — silver/gold star schema, SCD2 snapshots, 73 data tests
-- [x] **5. Orchestration** — Prefect flows (Airflow port later)
-- [x] **6. Serving** — Streamlit dashboard (daily digest pending)
-- [ ] **7. Cloud (GCP)** — managed Postgres, managed orchestration, IaC
-
 ## Design decisions
 
 See [`docs/`](docs/) for detailed decision logs on schema, ELT, dbt, and orchestration choices.
