@@ -86,7 +86,7 @@ dbt-docs:
 	$(DBT) docs serve --port 8080
 
 # --- Prefect orchestration (local server + work pool) ---
-PREFECT := uv run --no-sync prefect
+PREFECT := uv run --package olist-orchestration prefect
 FLOWS := uv run --package olist-orchestration python -m orchestration.flows
 
 prefect-server:
@@ -99,10 +99,10 @@ prefect-serve:
 	$(FLOWS) --serve
 
 prefect-pool:
-	$(PREFECT) work-pool create --type process elt-pool
+	$(PREFECT) work-pool create --type process elt-pool --overwrite
 
 prefect-deploy:
-	uv run --package olist-orchestration prefect deploy packages/orchestration/src/orchestration/flows.py:elt_flow --name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
+	uv run --package olist-orchestration prefect deploy packages/orchestration/src/orchestration/flows.py:elt_flow --name elt-daily --pool elt-pool --cron "0 7 * * *" --timezone "America/Sao_Paulo" --concurrency-limit 1 --no-prompt
 
 prefect-worker:
 	$(PREFECT) worker start --pool elt-pool
@@ -122,7 +122,8 @@ orc-logs:
 orc-deploy:
 	docker compose $(ORC) run --rm --no-deps prefect-worker \
 		uv run --no-sync prefect deploy /app/packages/orchestration/src/orchestration/flows.py:elt_flow \
-		--name elt-daily --pool elt-pool --cron "0 7 * * *" --concurrency-limit 1
+		--name elt-daily --pool elt-pool --cron "0 7 * * *" --timezone "America/Sao_Paulo" \
+		--concurrency-limit 1 --no-prompt
 
 orc-run:
 	docker compose $(ORC) run --rm --no-deps prefect-worker \

@@ -2,7 +2,7 @@ name: orchestration
 
 services:
   prefect-server:
-    image: prefecthq/prefect:3.8.5-python3.12
+    image: prefecthq/prefect:3.8.4-python3.12
     container_name: prefect-server
     restart: unless-stopped
     ports:

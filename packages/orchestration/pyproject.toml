@@ -2,6 +2,7 @@
 name = "olist-orchestration"
 version = "0.1.0"
 description = "Prefect flows orchestrating the Olist ELT pipeline"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "global-config",

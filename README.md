@@ -148,8 +148,10 @@ olist-ecommerce/                # uv virtual workspace; members under packages/*
 │   │   ├── docker-compose.yaml # one-shot elt job
 │   │   ├── src/pipeline/       # config.py, ingestion.py, run_elt.py
 │   │   └── dbt/                # models/, macros/, snapshots/, tests/
-│   ├── orchestration/          # containerized Prefect server + worker
+│   ├── orchestration/          # Prefect flows (host + container)
+│   │   └── README.md
 │   └── dashboard/              # Streamlit BI (reads BigQuery gold)
+│       └── README.md
 └── docs/
     ├── oltp-guide.md      # schema, seed, and simulator decisions
     ├── dlt-pipeline.md    # dlt pipeline architecture and decisions
