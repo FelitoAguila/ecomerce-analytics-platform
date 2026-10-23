@@ -1,6 +1,7 @@
 import argparse
 
 from prefect import flow
+from prefect.client.schemas.schedules import CronSchedule
 
 from orchestration.tasks import run_elt
 
@@ -23,7 +24,7 @@ if __name__ == "__main__":
     if args.serve:
         elt_flow.serve(
             name="elt-daily",
-            cron="0 7 * * *",
+            schedule=CronSchedule(cron="0 7 * * *", timezone="America/Sao_Paulo"),
             limit=1,
             pause_on_shutdown=False,
         )
