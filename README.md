@@ -6,19 +6,8 @@ Prefect orchestration, and a Streamlit dashboard.
 
 ## Architecture
 
-![OLTP schema](images/oltp-diagram.png)
+![Project architecture](images/architecture.drawio.png)
 
-```
-Neon Postgres (OLTP)            Neon Object Storage (CSV dataset)
-        │                                  │
-        │ dlt (incremental + reconcile)    │ seed (COPY)
-        v                                  v
-   BigQuery bronze_data / bronze_reconcile ──► dbt stg → int → mart
-                                                     │
-                                        Prefect / ELT runner
-                                                     │
-                                              Streamlit dashboard
-```
 
 ## Prerequisites
 

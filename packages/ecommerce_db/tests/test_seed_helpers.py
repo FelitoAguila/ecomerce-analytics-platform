@@ -35,3 +35,29 @@ def test_iter_csv_text_strips_utf8_bom():
     result = "".join(text)
     assert result.startswith("product_category_name")
     assert "baby" in result
+
+
+def test_iter_csv_text_multibyte_split():
+    content = "col1\tcol2\nhéllo\tworld\n".encode("utf-8")
+
+    class DummyBody:
+        def __init__(self, data):
+            self.data = data
+            self.pos = 0
+
+        def read(self, amt=1):
+            if self.pos >= len(self.data):
+                return b""
+            chunk = self.data[self.pos : self.pos + amt]
+            self.pos += amt
+            return chunk
+
+    class DummyS3:
+        def __init__(self, body):
+            self.body = body
+
+        def get_object(self, Bucket=None, Key=None):
+            return {"Body": self.body}
+
+    result = "".join(seed_helpers.iter_csv_text(DummyS3(DummyBody(content)), "b", "k"))
+    assert "héllo" in result

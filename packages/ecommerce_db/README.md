@@ -97,6 +97,8 @@ uv run --package olist-ecommerce-database seed --verify
 row count matches the known CSV totals (see `EXPECTED` in
 `helpers/seed_helpers.py`). Exit code `1` means a mismatch.
 
+![OLTP - schema](../../images/oltp-diagram.png)
+
 ## 6. Simulate live data (optional)
 
 With the database seeded, generate new data on top of it:
