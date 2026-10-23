@@ -15,6 +15,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.6",
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+    "pytest-cov>=5.0",
 ]
 
 [tool.uv.workspace]
@@ -32,3 +35,16 @@ src = ["packages/*/src"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["config", "ecommerce_db", "pipeline", "dashboard", "orchestration"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/*/tests", "tests"]
+addopts = "-ra"
+markers = [
+    "unit: fast unit tests with no external services",
+    "integration: integration tests requiring external credentials/services",
+    "slow: slow tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
